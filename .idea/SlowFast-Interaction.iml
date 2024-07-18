@@ -5,9 +5,9 @@
       <sourceFolder url="file://$MODULE_DIR$/slowfast" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/build" />
-      <excludeFolder url="file://$MODULE_DIR$/pyslowfast/build" />
       <excludeFolder url="file://$MODULE_DIR$/slowfast/build" />
-      <excludeFolder url="file://$MODULE_DIR$/pyslowfast/slowfast/build" />
+      <excludeFolder url="file://$MODULE_DIR$/slowfast/build" />
+      <excludeFolder url="file://$MODULE_DIR$/slowfast/slowfast/build" />
     </content>
     <orderEntry type="jdk" jdkName="slowfast" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
@@ -15,12 +15,5 @@
   <component name="PyDocumentationSettings">
     <option name="format" value="PLAIN" />
     <option name="myDocStringFormat" value="Plain" />
-  </component>
-  <component name="PyNamespacePackagesService">
-    <option name="namespacePackageFolders">
-      <list>
-        <option value="$MODULE_DIR$/slowfast" />
-      </list>
-    </option>
   </component>
 </module>

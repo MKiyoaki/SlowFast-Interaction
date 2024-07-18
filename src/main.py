@@ -1,10 +1,13 @@
 import os.path
 
-import pytorchvideo.models
 import torch
 import torch.nn.functional as F
 
-from helper.configurations import video_dir, label_dir, data_dir
+import slowfast.models as models
+
+from detectron2.config import get_cfg
+
+from helper.configurations import video_dir, label_dir, data_dir, proj_dir
 from helper.interaction_data_process import dataset_split
 from interaction_classification_module import InteractionClassificationModule
 from interaction_data_module import InteractionDataModule
@@ -14,15 +17,18 @@ def main():
     # Split dataset into train, validation, and test sets
     train_file, val_file, test_file = dataset_split(video_dir, label_dir, data_dir)
 
-    # Initialize the model
-    model = pytorchvideo.models.resnet.create_resnet()
-    criterion = F.cross_entropy
+    cfg = get_cfg()
+    cfg.merge_from_file(os.path.join(proj_dir, "src/interaction_config.yaml"))
 
-    classy_module = InteractionClassificationModule(model=model)
+    # Initialize the model
+    model = models.SlowFast(cfg)
+    criterion = F.cross_entropy
+    loss_fn = torch.nn.CrossEntropyLoss()
+
     data_module = InteractionDataModule(
         data_dir=data_dir,
         batch_size=32,
-        clip_duration=2,
+        clip_duration=1,
         train_file=train_file,
         val_file=val_file,
         test_file=test_file
@@ -30,9 +36,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    dl, ds = data_module.train_dataloader()
-    print(ds.num_videos)
-
+    print(model.modules())
 
     return 0
 

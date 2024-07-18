@@ -70,7 +70,7 @@ class InteractionDataModule:
             train_dataset,
             batch_size=self.batch_size,
             num_workers=self._NUM_WORKERS,
-        ), train_dataset
+        )
 
     def val_dataloader(self):
         val_dataset = InteractionDataset(
