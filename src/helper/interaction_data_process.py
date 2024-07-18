@@ -3,7 +3,7 @@ import random
 import csv
 import time
 
-from slowfast.utils.logging import setup_logging
+from pyslowfast.slowfast.utils.logging import setup_logging
 
 
 def dataset_split(data_path, label_path, collection_path, train_scales=0.8, val_scales=0.1, test_scales=0.1):
@@ -54,27 +54,24 @@ def dataset_split(data_path, label_path, collection_path, train_scales=0.8, val_
     def write_to_csv(file_path, files):
         with open(file_path, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['path_to_video', 'label'])
+            writer.writerow(['video_path', 'label_path'])
             for video_name in files:
                 label_file = find_label_file(video_name)
                 if label_file is None:
                     print(f"[{time.time}][Error] Label file not found for {video_name}. Operation aborted. ")
                     return None
                 video_path = os.path.join(data_path, video_name)
-                writer.writerow([video_path, generate_index(label_file)])
+                writer.writerow([video_path, os.path.join(label_path, label_file)])
         return file_path
-
-    def generate_index(filename):
-        return (int(filename[1:3]) - 1) * 4 + int(filename[5])
 
 
     train_files = [video_names[idx] for idx in train_indices]
     val_files = [video_names[idx] for idx in val_indices]
     test_files = [video_names[idx] for idx in test_indices]
 
-    train_csv_path = os.path.join(collection_path, "train_set.csv")
-    val_csv_path = os.path.join(collection_path, "val_set.csv")
-    test_csv_path = os.path.join(collection_path, "test_set.csv")
+    train_csv_path = os.path.join(collection_path, "train.csv")
+    val_csv_path = os.path.join(collection_path, "val.csv")
+    test_csv_path = os.path.join(collection_path, "test.csv")
 
     train_csv = write_to_csv(train_csv_path, train_files)
     val_csv = write_to_csv(val_csv_path, val_files)
