@@ -6,12 +6,19 @@ import torch.utils.data
 
 from pytorchvideo.data import LabeledVideoDataset
 
-"""
-TODO: ADD THE DOCUMENTATION
-"""
-
 
 class InteractionDataset(LabeledVideoDataset):
+    """
+    Dataset for video classification with labeled interactions.
+
+    Args:
+        labeled_video_paths_file: Path to CSV file with video paths and label paths.
+        clip_sampler: Strategy for sampling clips from videos.
+        decode_audio: Whether to decode audio from videos.
+        decode_video: Whether to decode video frames.
+        transform (Optional[Callable[[Dict[str, Any]], Dict[str, Any]]]): Transformations to apply to the clips.
+    """
+
     def __init__(self, labeled_video_paths_file, clip_sampler, decode_audio, decode_video, transform=None):
         super().__init__(
             labeled_video_paths_file,
@@ -27,14 +34,6 @@ class InteractionDataset(LabeledVideoDataset):
 
         # Load labels
         self._labels_by_video = self.load_all_labels(self._labeled_videos, label_files)
-
-    def __iter__(self):
-        self._video_sampler_iter = None
-        worker_info = torch.utils.data.get_worker_info()
-        if self._video_random_generator is not None and worker_info is not None:
-            base_seed = worker_info.seed - worker_info.id
-            self._video_random_generator.manual_seed(base_seed)
-        return self
 
     @staticmethod
     def load_all_labels(video_paths: List[str], label_files: List[str]) -> Dict[str, List[Dict]]:

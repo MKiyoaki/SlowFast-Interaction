@@ -8,7 +8,7 @@ proj_dir = os.path.join(proj_dir, '../')
 
 
 # input dir
-data_dir = os.path.join(proj_dir, f'../../data/interaction/{year}/')
+data_dir = os.path.join(proj_dir, f'data/interaction/{year}/')
 video_dir = os.path.join(data_dir, 'videos')
 label_dir = os.path.join(data_dir, 'labels')
 

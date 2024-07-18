@@ -30,8 +30,9 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    dl, ds = data_module.train_dataloader()
+    print(ds.num_videos)
 
-    print(len(data_module.val_dataloader()))
 
     return 0
 

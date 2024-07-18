@@ -3,12 +3,12 @@ import random
 import csv
 import time
 
-from pyslowfast.slowfast.utils.logging import setup_logging
-
 
 def dataset_split(data_path, label_path, collection_path, train_scales=0.8, val_scales=0.1, test_scales=0.1):
     """
-    Create annotated csv files containing video paths and their labels
+    Create annotated csv files containing video paths and their labels. Initially split by
+    0.8 : 0.1 : 0.1
+    for train, validation and test sets.
 
     :param data_path: Path to video data directory
     :param label_path: Path to label data directory
@@ -63,7 +63,6 @@ def dataset_split(data_path, label_path, collection_path, train_scales=0.8, val_
                 video_path = os.path.join(data_path, video_name)
                 writer.writerow([video_path, os.path.join(label_path, label_file)])
         return file_path
-
 
     train_files = [video_names[idx] for idx in train_indices]
     val_files = [video_names[idx] for idx in val_indices]
