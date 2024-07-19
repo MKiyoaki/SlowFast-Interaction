@@ -17,11 +17,8 @@ def main():
     # Split dataset into train, validation, and test sets
     train_file, val_file, test_file = dataset_split(video_dir, label_dir, data_dir)
 
-    cfg = get_cfg()
-    cfg.merge_from_file(os.path.join(proj_dir, "src/interaction_config.yaml"))
 
     # Initialize the model
-    model = models.SlowFast(cfg)
     criterion = F.cross_entropy
     loss_fn = torch.nn.CrossEntropyLoss()
 
@@ -33,10 +30,6 @@ def main():
         val_file=val_file,
         test_file=test_file
     )
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    print(model.modules())
 
     return 0
 
