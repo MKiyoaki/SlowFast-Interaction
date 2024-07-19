@@ -88,11 +88,12 @@ class Interaction(torch.utils.data.Dataset):
         """
         path_to_file = os.path.join(
             self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
-        )  # train/test/val.csv
+        )  # train.csv / test.csv / val.csv
         assert pathmgr.exists(path_to_file), "{} dir not found".format(path_to_file)
 
         self._path_to_videos = []
         self._path_to_labels = []
+        self._labels = []
         self._spatial_temporal_idx = []
         self.cur_iter = 0
         self.chunk_epoch = 0
@@ -109,6 +110,7 @@ class Interaction(torch.utils.data.Dataset):
             for idx in range(self._num_clips):
                 self._path_to_videos.append(os.path.join(self.cfg.DATA.PATH_PREFIX, video_path))
                 self._path_to_labels.append(os.path.join(self.cfg.DATA.PATH_PREFIX, label_path))
+                self._labels.append(self._get_label(self._path_to_labels[-1]))
                 self._spatial_temporal_idx.append(idx)
                 self._video_meta[clip_idx * self._num_clips + idx] = {}
 
@@ -206,6 +208,8 @@ class Interaction(torch.utils.data.Dataset):
             )
             assert self.mode in ["train", "val"]
 
+        # Try to decode and sample a clip from a video. If the video can not be
+        # decoded, repeatly find a random video replacement that can be decoded.
         for i_try in range(self._num_retries):
             video_container = None
             try:
@@ -307,7 +311,10 @@ class Interaction(torch.utils.data.Dataset):
             num_out = num_aug * num_decode
             f_out, time_idx_out = [None] * num_out, [None] * num_out
             idx = -1
-            labels = self._get_label(self._path_to_labels[index])
+
+            # Process the labels to get the labels within the current clip's time range
+            label = self._labels[index]
+            labels = [self._get_frame_labels(self._get_frame_timestamp(frame_timeidx[0]), label) for frame_timeidx in time_idx]
 
             for i in range(num_decode):
                 for _ in range(num_aug):
@@ -335,44 +342,79 @@ class Interaction(torch.utils.data.Dataset):
                             auto_augment=self.cfg.AUG.AA_TYPE,
                             interpolation=self.cfg.AUG.INTERPOLATION,
                         )
-                        f_out[idx] = transform.apply_augment(
-                            f_out[idx], aug_transform
-                        )
 
+                        # T H W C -> T C H W.
+                        f_out[idx] = f_out[idx].permute(0, 3, 1, 2)
+                        list_img = self._frame_to_list_img(f_out[idx])
+                        list_img = aug_transform(list_img)
+                        f_out[idx] = self._list_img_to_frames(list_img)
+                        f_out[idx] = f_out[idx].permute(0, 2, 3, 1)
+
+                    # Perform color normalization.
                     f_out[idx] = utils.tensor_normalize(
                         f_out[idx], self.cfg.DATA.MEAN, self.cfg.DATA.STD
                     )
 
-                    f_out[idx], boxes = utils.spatial_sampling(
+                    f_out[idx] = f_out[idx].permute(3, 0, 1, 2)
+
+                    scl, asp = (
+                        self.cfg.DATA.TRAIN_JITTER_SCALES_RELATIVE,
+                        self.cfg.DATA.TRAIN_JITTER_ASPECT_RELATIVE,
+                    )
+                    relative_scales = (
+                        None if (self.mode not in ["train"] or len(scl) == 0) else scl
+                    )
+                    relative_aspect = (
+                        None if (self.mode not in ["train"] or len(asp) == 0) else asp
+                    )
+                    f_out[idx] = utils.spatial_sampling(
                         f_out[idx],
-                        spatial_sample_index,
-                        min_scale[i],
-                        max_scale[i],
-                        crop_size[i],
-                        self.cfg.DATA.TARGET_FPS,
-                        self.cfg.DATA.TEST.NUM_ENSEMBLE_VIEWS,
-                        time_diff_prob=self.p_convert_dt
-                        if self.mode in ["train"]
-                        else 0.0,
-                        min_delta=self.cfg.CONTRASTIVE.DELTA_CLIPS_MIN,
-                        max_delta=self.cfg.CONTRASTIVE.DELTA_CLIPS_MAX,
+                        spatial_idx=spatial_sample_index,
+                        min_scale=min_scale[i],
+                        max_scale=max_scale[i],
+                        crop_size=crop_size[i],
+                        random_horizontal_flip=self.cfg.DATA.RANDOM_FLIP,
+                        inverse_uniform_sampling=self.cfg.DATA.INV_UNIFORM_SAMPLE,
+                        aspect_ratio=relative_aspect,
+                        scale=relative_scales,
+                        motion_shift=(
+                            self.cfg.DATA.TRAIN_JITTER_MOTION_SHIFT
+                            if self.mode in ["train"]
+                            else False
+                        ),
                     )
 
-                    f_out[idx] = f_out[idx].transpose(0, 1)
-                    f_out[idx] = f_out[idx].contiguous()
+                    if self.rand_erase:
+                        erase_transform = RandomErasing(
+                            self.cfg.AUG.RE_PROB,
+                            mode=self.cfg.AUG.RE_MODE,
+                            max_count=self.cfg.AUG.RE_COUNT,
+                            num_splits=self.cfg.AUG.RE_COUNT,
+                            device="cpu",
+                        )
+                        f_out[idx] = erase_transform(
+                            f_out[idx].permute(1, 0, 2, 3)
+                        ).permute(1, 0, 2, 3)
 
-            if num_decode > 1:
-                f_out = torch.stack(f_out, dim=0).transpose(0, 1)
-                time_idx_out = torch.stack(time_idx_out, dim=0).transpose(0, 1)
-            else:
-                f_out = torch.stack(f_out, dim=0)
-                time_idx_out = torch.stack(time_idx_out, dim=0)
+                    f_out[idx] = utils.pack_pathway_output(self.cfg, f_out[idx])
+                    if self.cfg.AUG.GEN_MASK_LOADER:
+                        mask = self._gen_mask()
+                        f_out[idx] = f_out[idx] + [torch.Tensor(), mask]
 
-            # Process the labels to get the labels within the current clip's time range
-            label = self._path_to_labels[index]
-            label_clip = [lbl for lbl in label if lbl['time'] in time_idx_out]
+            frames = f_out[0] if num_out == 1 else f_out
+            time_idx = np.array(time_idx_out)
 
-            return f_out, label_clip, index
+            if (
+                num_aug * num_decode > 1
+                and not self.cfg.MODEL.MODEL_NAME == "ContrastiveModel"
+            ):
+                labels = labels * num_aug * num_decode
+                index = [index] * num_aug * num_decode
+            if self.cfg.DATA.DUMMY_LOAD:
+                if self.dummy_output is None:
+                    self.dummy_output = (frames, labels, index, time_idx, {})
+
+            return frames, labels, index, time_idx, {}
         else:
             raise RuntimeError(
                 "Failed to fetch video after {} retries; trial {}".format(
@@ -404,6 +446,36 @@ class Interaction(torch.utils.data.Dataset):
             }
             labels.append(label)
         return labels
+
+    def _get_frame_labels(self, timestamp, label_collection):
+        # Initialize a default label with all values set to 0
+        # TODO： OPTIMIZATION？
+        default_label = {
+            'UserAwkwardness': 0,
+            'RobotMistake': 0,
+            'RobotInterruption': 0,
+            'RobotNonResponding': 0,
+            'RobotInappropriateResponse': 0
+        }
+
+        # Convert default_label to tensor
+        default_label_tensor = torch.tensor(list(default_label.values()), dtype=torch.float32)
+
+        # Iterate through each label in the collection
+        for label in label_collection:
+            if label['start_time'] <= timestamp <= label['end_time']:
+                # Convert label['features'] to tensor
+                features = label['features']
+                features_tensor = torch.tensor([features.get(key, 0) for key in default_label.keys()],
+                                               dtype=torch.float32)
+                return features_tensor
+
+        # If no matching label is found, return the default label as tensor
+        return default_label_tensor
+
+    def _get_frame_timestamp(self, frame_index):
+        frame_time = frame_index / self.cfg.DATA.TARGET_FPS
+        return frame_time
 
     def _get_chunk(self, file_obj, chunk_size):
         """

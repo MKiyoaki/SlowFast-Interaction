@@ -1,7 +1,7 @@
 TRAIN:
   ENABLE: True
   DATASET: Interaction
-  BATCH_SIZE: 8
+  BATCH_SIZE: 2
   EVAL_PERIOD: 10
   CHECKPOINT_PERIOD: 1
   AUTO_RESUME: True
@@ -38,7 +38,7 @@ BN:
 SOLVER:
   BASE_LR: 0.1
   LR_POLICY: cosine
-  MAX_EPOCH: 196
+  MAX_EPOCH: 1
   MOMENTUM: 0.9
   WEIGHT_DECAY: 1e-4
   WARMUP_EPOCHS: 34.0
@@ -51,7 +51,7 @@ MODEL:
   LOSS_FUNC: cross_entropy
   DROPOUT_RATE: 0.5
 TEST:
-  ENABLE: True
+  ENABLE: FALSE
   DATASET: Interaction
   BATCH_SIZE: 64
 DATA_LOADER:
@@ -60,4 +60,18 @@ DATA_LOADER:
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: .
+OUTPUT_DIR: ../outputs/models
+
+
+TENSORBOARD:
+  ENABLE: False
+  MODEL_VIS:
+    ENABLE: True
+    MODEL_WEIGHTS: False # Set to True to visualize model weights.
+    ACTIVATIONS: False # Set to True to visualize feature maps.
+    INPUT_VIDEO: False # Set to True to visualize the input video(s) for the corresponding feature maps.
+    LAYER_LIST: [conv1, fc1] # List of layer names to visualize weights and activations for.
+    GRAD_CAM:
+      ENABLE: True
+      LAYER_LIST: [conv1, fc1] # List of CNN layers to use for Grad-CAM visualization method.
+                  # The number of layer must be equal to the number of pathway(s).
