@@ -1,13 +1,25 @@
 # SlowFast-Interaction
 
 ### 1. Installation
+
 #### 1.1. Pre-requirements
-#### 1.2. Install with Conda
 
+- Create a new environment
+  `conda create env -f requirement.yaml`
+- Activate the new environment
+  `conda activate slowfast`
 
-### Getting started
+#### 1.2. Install PySlowFast
 
+- Please refer the documentation at `/slowfast/INSTALL.md`
 
+### 2. Getting started
+
+#### 2.1. Model Training
+
+#### 2.2. Edit a configuration file
+
+### TBC
 
 ```
 cd slowfast
