@@ -1,7 +1,75 @@
 import os
 import random
 import csv
+import pandas as pd
 import time
+
+from moviepy.video.io.VideoFileClip import VideoFileClip
+
+
+def video_clip_by_duration(raw_data_path, raw_label_path, clip_data_path):
+    # Create output directory if not exists
+    output_video_dir = os.path.join(clip_data_path, "videos/")
+    if not os.path.exists(output_video_dir):
+        os.makedirs(output_video_dir)
+
+    output_label_dir = os.path.join(clip_data_path, "labels/")
+    if not os.path.exists(output_label_dir):
+        os.makedirs(output_label_dir)
+
+    label_files = os.listdir(raw_label_path)
+    for label_file in label_files:
+        # Load labels
+        file_name = label_file.split("/")[-1].split(".")[0]
+        labels = get_label(os.path.join(raw_label_path, label_file))
+
+        # Process each label and create corresponding video and label files
+        for idx, label in enumerate(labels):
+            start_time = label['start_time']
+            end_time = label['end_time']
+            output_video_path = os.path.join(output_video_dir,
+                                             f"{file_name}_{idx + 1}.avi")
+            output_label_path = os.path.join(output_label_dir,
+                                             f"{file_name}_{idx + 1}.csv")
+
+            # Cut video segment
+            with VideoFileClip(os.path.join(raw_data_path, f"{file_name}.avi")) as video:
+                new_clip = video.subclip(start_time, end_time)
+                new_clip.write_videofile(output_video_path, codec="libx264")
+
+            # Save label to CSV
+            label_data = pd.DataFrame([label['features']])
+            label_data['start_time'] = start_time
+            label_data['end_time'] = end_time
+            label_data.to_csv(output_label_path, index=False)
+
+    return 0
+
+
+def get_label(label_path):
+    """
+    Load labels for a given video path.
+    Args:
+        label_path (str): the path to the label file.
+    Returns:
+        labels (list): the labels for the video.
+    """
+    data = pd.read_csv(label_path)
+    labels = []
+    for idx, row in data.iterrows():
+        label = {
+            'start_time': row['Begin Time - ss.msec'],
+            'end_time': row['End Time - ss.msec'],
+            'features': {
+                'UserAwkwardness': row['UserAwkwardness'],
+                'RobotMistake': row['RobotMistake'],
+                'RobotInterruption': row['RobotInterruption'],
+                'RobotNonResponding': row['RobotNonResponding'],
+                'RobotInappropriateResponse': row['RobotInappropriateResponse'],
+            }
+        }
+        labels.append(label)
+    return labels
 
 
 def dataset_split(data_path, label_path, collection_path, train_scales=0.8, val_scales=0.1, test_scales=0.1):
