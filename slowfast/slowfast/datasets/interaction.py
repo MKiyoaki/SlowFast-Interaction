@@ -311,10 +311,9 @@ class Interaction(torch.utils.data.Dataset):
             num_out = num_aug * num_decode
             f_out, time_idx_out = [None] * num_out, [None] * num_out
             idx = -1
-
-            # Process the labels to get the labels within the current clip's time range
+            # TODO: Not quite sure if this is correct
             label = self._labels[index]
-            labels = [self._get_frame_labels(self._get_frame_timestamp(frame_timeidx[0]), label) for frame_timeidx in time_idx]
+            # labels = self._get_frame_labels(self._get_frame_timestamp(time_idx[0][0]), label)
 
             for i in range(num_decode):
                 for _ in range(num_aug):
@@ -408,13 +407,13 @@ class Interaction(torch.utils.data.Dataset):
                 num_aug * num_decode > 1
                 and not self.cfg.MODEL.MODEL_NAME == "ContrastiveModel"
             ):
-                labels = labels * num_aug * num_decode
+                label = [label] * num_aug * num_decode
                 index = [index] * num_aug * num_decode
             if self.cfg.DATA.DUMMY_LOAD:
                 if self.dummy_output is None:
-                    self.dummy_output = (frames, labels, index, time_idx, {})
+                    self.dummy_output = (frames, label, index, time_idx, {})
 
-            return frames, labels, index, time_idx, {}
+            return frames, label, index, time_idx, {}
         else:
             raise RuntimeError(
                 "Failed to fetch video after {} retries; trial {}".format(
@@ -431,51 +430,23 @@ class Interaction(torch.utils.data.Dataset):
             labels (dict): the labels for the video.
         """
         data = pd.read_csv(label_path)
-        labels = []
+        label = {}
         for idx, row in data.iterrows():
             label = {
-                'start_time': row['Begin Time - ss.msec'],
-                'end_time': row['End Time - ss.msec'],
-                'features': {
                     'UserAwkwardness': row['UserAwkwardness'],
                     'RobotMistake': row['RobotMistake'],
                     'RobotInterruption': row['RobotInterruption'],
                     'RobotNonResponding': row['RobotNonResponding'],
                     'RobotInappropriateResponse': row['RobotInappropriateResponse'],
                 }
-            }
-            labels.append(label)
-        return labels
 
-    def _get_frame_labels(self, timestamp, label_collection):
-        # Initialize a default label with all values set to 0
-        # TODO： OPTIMIZATION？
-        default_label = {
-            'UserAwkwardness': 0,
-            'RobotMistake': 0,
-            'RobotInterruption': 0,
-            'RobotNonResponding': 0,
-            'RobotInappropriateResponse': 0
-        }
+        label_tensor = torch.tensor([label.get(key, 0) for key in label.keys()], dtype=torch.float32)
+        # Create a binary string based on feature values
+        binary_string = ''.join(str(int(label.get(key, 0))) for key in label.keys())
 
-        # Convert default_label to tensor
-        default_label_tensor = torch.tensor(list(default_label.values()), dtype=torch.float32)
-
-        # Iterate through each label in the collection
-        for label in label_collection:
-            if label['start_time'] <= timestamp <= label['end_time']:
-                # Convert label['features'] to tensor
-                features = label['features']
-                features_tensor = torch.tensor([features.get(key, 0) for key in default_label.keys()],
-                                               dtype=torch.float32)
-                return features_tensor
-
-        # If no matching label is found, return the default label as tensor
-        return default_label_tensor
-
-    def _get_frame_timestamp(self, frame_index):
-        frame_time = frame_index / self.cfg.DATA.TARGET_FPS
-        return frame_time
+        # Convert the binary string to a decimal integer
+        label_int = int(binary_string, 2)
+        return label_int
 
     def _get_chunk(self, file_obj, chunk_size):
         """
@@ -496,3 +467,11 @@ class Interaction(torch.utils.data.Dataset):
             epoch (int): the current epoch number.
         """
         self.epoch = epoch
+
+    @property
+    def num_videos(self):
+        """
+        Returns:
+            (int): the number of videos in the dataset.
+        """
+        return len(self._path_to_videos)
