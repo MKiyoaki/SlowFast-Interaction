@@ -440,13 +440,13 @@ class Interaction(torch.utils.data.Dataset):
                     'RobotInappropriateResponse': row['RobotInappropriateResponse'],
                 }
 
-        label_tensor = torch.tensor([label.get(key, 0) for key in label.keys()], dtype=torch.float32)
         # Create a binary string based on feature values
         binary_string = ''.join(str(int(label.get(key, 0))) for key in label.keys())
 
         # Convert the binary string to a decimal integer
-        label_int = int(binary_string, 2)
-        return label_int
+        # label_int = int(binary_string, 2)
+        label_tensor = torch.tensor(list(label.values()), dtype=torch.float32)
+        return label_tensor
 
     def _get_chunk(self, file_obj, chunk_size):
         """
