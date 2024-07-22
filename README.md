@@ -31,7 +31,7 @@ cd slowfast
 ```
 2. Using the following command to start a training process. 
 ```
-python tools/run_net.py --cfg ../src/interaction_config.yaml NUM_GPUS 1 TRAIN.BATCH_SIZE 8 SOLVER.BASE_LR 0.0125
+python tools/run_net.py --cfg ../src/config/interaction_config.yaml NUM_GPUS 1 TRAIN.BATCH_SIZE 8 SOLVER.BASE_LR 0.0125
 ```
 
 #### 2.3. Edit a configuration file

@@ -197,7 +197,7 @@ class GetWeightAndActivation:
         """
 
         def hook_fn(module, input, output):
-            self.hooks[layer_name] = output.clone().detach()
+            self.hooks[layer_name] = output[0].clone().detach()
 
         layer = get_layer(self.model, layer_name)
         layer.register_forward_hook(hook_fn)

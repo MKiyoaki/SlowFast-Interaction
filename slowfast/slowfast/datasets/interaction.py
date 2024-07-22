@@ -440,11 +440,7 @@ class Interaction(torch.utils.data.Dataset):
                     'RobotInappropriateResponse': row['RobotInappropriateResponse'],
                 }
 
-        # Create a binary string based on feature values
-        binary_string = ''.join(str(int(label.get(key, 0))) for key in label.keys())
-
         # Convert the binary string to a decimal integer
-        # label_int = int(binary_string, 2)
         label_tensor = torch.tensor(list(label.values()), dtype=torch.float32)
         return label_tensor
 

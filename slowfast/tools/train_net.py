@@ -156,7 +156,7 @@ def train_epoch(
         scaler.unscale_(optimizer)
         # Clip gradients if necessary
         if cfg.SOLVER.CLIP_GRAD_VAL:
-            grad_norm = torch.nn.utils.clip_grad_value_(
+            grad_norm = torch.nn.utils.clip_grad_norm_(
                 model.parameters(), cfg.SOLVER.CLIP_GRAD_VAL
             )
         elif cfg.SOLVER.CLIP_GRAD_L2NORM:
@@ -257,15 +257,25 @@ def train_epoch(
             )
             # write to tensorboard format if available.
             if writer is not None:
-                writer.add_scalars(
-                    {
-                        "Train/loss": loss,
-                        "Train/lr": lr,
-                        "Train/Top1_err": top1_err,
-                        "Train/Top5_err": top5_err,
-                    },
-                    global_step=data_size * cur_epoch + cur_iter,
-                )
+                if cfg.DATA.MULTI_LABEL:
+                    writer.add_scalars(
+                        {
+                            "Train/loss": loss,
+                            "Train/lr": lr,
+                            "Train/grad_norm": grad_norm
+                        },
+                        global_step=data_size * cur_epoch + cur_iter,
+                    )
+                else:
+                    writer.add_scalars(
+                        {
+                            "Train/loss": loss,
+                            "Train/lr": lr,
+                            "Train/Top1_err": top1_err,
+                            "Train/Top5_err": top5_err,
+                        },
+                        global_step=data_size * cur_epoch + cur_iter,
+                    )
         train_meter.iter_toc()  # do measure allreduce for this meter
         train_meter.log_iter_stats(cur_epoch, cur_iter)
         torch.cuda.synchronize()

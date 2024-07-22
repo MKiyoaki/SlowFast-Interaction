@@ -78,7 +78,7 @@ def run_visualization(vis_loader, model, cfg, writer=None):
         )
     logger.info("Finish drawing weights.")
     global_idx = -1
-    for inputs, labels, _, meta in tqdm.tqdm(vis_loader):
+    for inputs, labels, _, _, meta in tqdm.tqdm(vis_loader):
         if cfg.NUM_GPUS:
             # Transfer the data to the current GPU device.
             if isinstance(inputs, (list,)):
