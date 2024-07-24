@@ -200,6 +200,7 @@ def train_epoch(
 
         else:
             top1_err, top5_err = None, None
+            f1_weighted, f1_macro, f1_micro = None, None, None
             if cfg.DATA.MULTI_LABEL:
                 # Gather all the predictions across all the devices.
                 if cfg.NUM_GPUS > 1:
@@ -208,6 +209,15 @@ def train_epoch(
                     loss.item(),
                     grad_norm.item(),
                 )
+                ks = [1, 5]
+                num_topks_correct = metrics.topks_correct_multi_label(preds, labels, ks)
+                top1_err, top5_err = [
+                    (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                ]
+                #f1_macro = metrics.f1_scores_multi_label(preds, labels, average='macro')
+                #f1_micro = metrics.f1_scores_multi_label(preds, labels, average='micro')
+                #f1_weighted = metrics.f1_scores_multi_label(preds, labels, average='weighted')
+
             elif cfg.MASK.ENABLE:
                 # Gather all the predictions across all the devices.
                 if cfg.NUM_GPUS > 1:
@@ -262,7 +272,12 @@ def train_epoch(
                         {
                             "Train/loss": loss,
                             "Train/lr": lr,
-                            "Train/grad_norm": grad_norm
+                            "Train/grad_norm": grad_norm,
+                            "Train/Top1_err": top1_err,
+                            "Train/Top5_err": top5_err,
+                            # "Train/F1_macro": f1_macro,
+                            # "Train/F1_micro": f1_micro,
+                            # "Train/F1_weighted": f1_weighted,
                         },
                         global_step=data_size * cur_epoch + cur_iter,
                     )

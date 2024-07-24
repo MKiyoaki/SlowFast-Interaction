@@ -1,16 +1,16 @@
 TRAIN:
-  ENABLE: False
+  ENABLE: True
   DATASET: Interaction
   BATCH_SIZE: 16
   EVAL_PERIOD: 10
   CHECKPOINT_PERIOD: 5
   AUTO_RESUME: True
 DATA:
-  NUM_FRAMES: 8
+  NUM_FRAMES: 4
   SAMPLING_RATE: 8
   TRAIN_JITTER_SCALES: [256, 320]
-  TRAIN_CROP_SIZE: 112  # 224
-  TEST_CROP_SIZE: 128 # 256
+  TRAIN_CROP_SIZE: 224
+  TEST_CROP_SIZE: 256
   INPUT_CHANNEL_NUM: [3]
   MULTI_LABEL: True
   PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/clip/2022/w1"
@@ -31,12 +31,12 @@ BN:
   USE_PRECISE_STATS: True
   NUM_BATCHES_PRECISE: 200
 SOLVER:
-  BASE_LR: 1e-1
+  BASE_LR: 1e-3
   LR_POLICY: cosine
-  MAX_EPOCH: 10
+  MAX_EPOCH: 50
   MOMENTUM: 0.9
   WEIGHT_DECAY: 1e-4
-  WARMUP_EPOCHS: 24.0
+  WARMUP_EPOCHS: 5.0
   WARMUP_START_LR: 0.01
   OPTIMIZING_METHOD: sgd
   CLIP_GRAD_VAL: True
@@ -62,7 +62,7 @@ TENSORBOARD:
   ENABLE: True
   CLASS_NAMES_PATH: "../src/config/class_id.json"
   MODEL_VIS:
-    ENABLE: True
+    ENABLE: False
     MODEL_WEIGHTS: False # Set to True to visualize model weights.
     ACTIVATIONS: False # Set to True to visualize feature maps.
     INPUT_VIDEO: False # Set to True to visualize the input video(s) for the corresponding feature maps.

@@ -2,8 +2,9 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 
 """Functions for computing metrics."""
-
+import numpy as np
 import torch
+from sklearn.metrics import f1_score
 
 
 def topks_correct(preds, labels, ks):
@@ -62,3 +63,91 @@ def topk_accuracies(preds, labels, ks):
     """
     num_topks_correct = topks_correct(preds, labels, ks)
     return [(x / preds.size(0)) * 100.0 for x in num_topks_correct]
+
+
+def topks_correct_multi_label(preds, labels, ks):
+    """
+    Computes the number of top-k correct predictions for multi-label classification.
+
+    Args:
+        preds (tensor): Predictions with probabilities or scores, shape (N, ClassNum).
+        labels (tensor): Ground truth labels, shape (N, ClassNum), where each element is binary.
+        ks (list): List of top-k values to compute.
+
+    Returns:
+        topks_correct (list): List of numbers, where the `i`-th entry corresponds to the number of top-`ks[i]` correct predictions.
+    """
+    assert preds.size(0) == labels.size(0), "Batch dim of predictions and labels must match"
+
+    # Find the top max_k predictions for each sample
+    _, top_max_k_inds = torch.topk(preds, max(ks), dim=1, largest=True, sorted=True)
+
+    # For multi-label classification, we need to check whether all relevant labels are in the top-k predictions
+    topks_correct = []
+    for k in ks:
+        top_k_preds = top_max_k_inds[:, :k]
+        correct = torch.stack([torch.any(labels[i][top_k_preds[i]].bool()) for i in range(labels.size(0))])
+        topks_correct.append(correct.sum().item())
+
+    return topks_correct
+
+
+def topk_errors_multi_label(preds, labels, ks):
+    """
+    Computes the top-k error for multi-label classification.
+
+    Args:
+        preds (tensor): Predictions with probabilities or scores, shape (N, ClassNum).
+        labels (tensor): Ground truth labels, shape (N, ClassNum), where each element is binary.
+        ks (list): List of ks to calculate the top accuracies.
+
+    Returns:
+        topk_errors (list): List of top-k errors for each k.
+    """
+    num_topks_correct = topks_correct_multi_label(preds, labels, ks)
+    return [(1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct]
+
+
+def topk_accuracies_multi_label(preds, labels, ks):
+    """
+    Computes the top-k accuracy for multi-label classification.
+
+    Args:
+        preds (tensor): Predictions with probabilities or scores, shape (N, ClassNum).
+        labels (tensor): Ground truth labels, shape (N, ClassNum), where each element is binary.
+        ks (list): List of ks to calculate the top accuracies.
+
+    Returns:
+        topk_accuracies (list): List of top-k accuracies for each k.
+    """
+    num_topks_correct = topks_correct_multi_label(preds, labels, ks)
+    return [(x / preds.size(0)) * 100.0 for x in num_topks_correct]
+
+
+def f1_scores_multi_label(preds, labels, average='macro', threshold=0.5):
+    """
+    Computes the F1 score for multi-label classification.
+
+    Args:
+        preds (tensor): Predictions with probabilities or scores, shape (N, ClassNum).
+        labels (tensor): Ground truth labels, shape (N, ClassNum), where each element is binary.
+        average (str): Averaging method for F1 score. Options are 'micro', 'macro', 'weighted', or 'samples'.
+
+    Returns:
+        f1_score (float): F1 score for multi-label classification.
+    """
+    # Convert tensors to numpy arrays
+    preds = preds.detach().cpu().numpy()
+    labels = labels.detach().cpu().numpy()
+
+    preds = np.array(preds)
+    labels = np.array(labels)
+
+    preds = (preds >= threshold).astype(int)
+
+    zero_division = 0
+
+    # Binarize predictions
+    f1 = f1_score(labels, preds, average=average, zero_division=zero_division)
+
+    return f1

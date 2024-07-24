@@ -52,7 +52,7 @@ class GradCAM:
             self.gradients[layer_name] = grad_output[0].detach()
 
         def get_activations(module, input, output):
-            self.activations[layer_name] = output.clone().detach()
+            self.activations[layer_name] = output[0].clone().detach()
 
         target_layer = get_layer(self.model, layer_name=layer_name)
         target_layer.register_forward_hook(get_activations)
