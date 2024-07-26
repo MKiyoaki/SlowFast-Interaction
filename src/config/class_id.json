@@ -1,7 +1,6 @@
 {
   "UserAwkwardness": 0,
-  "RobotMistake": 1,
-  "RobotInterruption": 2,
-  "RobotNonResponding": 3,
-  "RobotInappropriateResponse": 4
+  "RobotInterruption": 1,
+  "RobotNonResponding": 2,
+  "RobotInappropriateResponse": 3
 }

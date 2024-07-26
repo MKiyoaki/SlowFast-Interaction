@@ -336,6 +336,16 @@ class TestMeter:
                 )
             self.clip_count[vid_id] += 1
 
+            # Calculate F1 score and average accuracies
+            if self.multi_label:
+                preds_np = torch.sigmoid(self.video_preds).cpu().numpy()  # Sigmoid for multi-label
+                labels_np = self.video_labels.cpu().numpy()
+                self.stats["f1_score"] = metrics.f1_scores_multi_label(labels_np, preds_np, average='weighted')
+                self.stats["avg_accuracy"] = metrics.accuracies_multi_label(labels_np, preds_np)
+            else:
+                self.stats["f1_score"] = None
+                self.stats["avg_accuracy"] = None
+
     def log_iter_stats(self, cur_iter):
         """
         Log the stats.
@@ -350,6 +360,9 @@ class TestMeter:
             "eta": eta,
             "time_diff": self.iter_timer.seconds(),
         }
+        if self.stats.get("f1_score") is not None:
+            stats["f1_score"] = self.stats["f1_score"]
+            stats["avg_accuracy"] = self.stats["avg_accuracy"]
         logging.log_json_stats(stats)
 
     def iter_tic(self):

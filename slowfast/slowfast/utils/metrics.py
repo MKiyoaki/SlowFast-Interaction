@@ -23,21 +23,24 @@ def topks_correct(preds, labels, ks):
         topks_correct (list): list of numbers, where the `i`-th entry
             corresponds to the number of top-`ks[i]` correct predictions.
     """
-    assert preds.size(0) == labels.size(
-        0
-    ), "Batch dim of predictions and labels must match"
-    # Find the top max_k predictions for each sample
-    _top_max_k_vals, top_max_k_inds = torch.topk(
-        preds, max(ks), dim=1, largest=True, sorted=True
-    )
-    # (batch_size, max_k) -> (max_k, batch_size).
-    top_max_k_inds = top_max_k_inds.t()
-    # (batch_size, ) -> (max_k, batch_size).
-    rep_max_k_labels = labels.view(1, -1).expand_as(top_max_k_inds)
-    # (i, j) = 1 if top i-th prediction for the j-th sample is correct.
-    top_max_k_correct = top_max_k_inds.eq(rep_max_k_labels)
-    # Compute the number of topk correct predictions for each k.
-    topks_correct = [top_max_k_correct[:k, :].float().sum() for k in ks]
+    assert preds.size(0) == labels.size(0), "Batch dim of predictions and labels must match"
+
+    # Get the top max_k predictions for each sample
+    max_k = max(ks)
+    _top_max_k_vals, top_max_k_inds = torch.topk(preds, max_k, dim=1, largest=True, sorted=True)
+
+    # Create a mask for top_k predictions
+    top_max_k_mask = torch.zeros_like(preds, dtype=torch.bool)
+    batch_size = preds.size(0)
+
+    for i in range(batch_size):
+        top_max_k_mask[i, top_max_k_inds[i]] = True
+
+    # Check if any of the top-k predictions for each instance are in the true labels
+    top_max_k_correct = top_max_k_mask & labels.bool()
+
+    # Count the number of correct predictions for each k
+    topks_correct = [top_max_k_correct[:, :k].any(dim=1).sum().item() for k in ks]
     return topks_correct
 
 
@@ -82,12 +85,21 @@ def topks_correct_multi_label(preds, labels, ks):
     # Find the top max_k predictions for each sample
     _, top_max_k_inds = torch.topk(preds, max(ks), dim=1, largest=True, sorted=True)
 
-    # For multi-label classification, we need to check whether all relevant labels are in the top-k predictions
     topks_correct = []
     for k in ks:
-        top_k_preds = top_max_k_inds[:, :k]
-        correct = torch.stack([torch.any(labels[i][top_k_preds[i]].bool()) for i in range(labels.size(0))])
-        topks_correct.append(correct.sum().item())
+        top_k_preds = top_max_k_inds[:, :k]  # Get top-k indices
+
+        correct = 0
+        for i in range(labels.size(0)):
+            # Create a mask to identify the top-k predictions
+            top_k_mask = torch.zeros(labels.size(1), dtype=torch.bool)
+            top_k_mask[top_k_preds[i]] = True
+
+            # Check if all true labels are within the top-k predictions
+            if torch.all(labels[i][top_k_mask]):
+                correct += 1
+
+        topks_correct.append(correct)
 
     return topks_correct
 
@@ -122,6 +134,45 @@ def topk_accuracies_multi_label(preds, labels, ks):
     """
     num_topks_correct = topks_correct_multi_label(preds, labels, ks)
     return [(x / preds.size(0)) * 100.0 for x in num_topks_correct]
+
+
+def accuracies_multi_label(preds, labels):
+    """
+    Compute the accuracies of each label and weighted average value for multi label classification.
+
+    Args:
+        preds (tensor):
+        labels (tensor):
+
+    Return:
+        label_accuracies (list):
+        weighted_accuracy (float):
+    """
+
+    um_samples = preds.size(0)
+    num_classes = preds.size(1)
+
+    pred_labels = (preds > 0.5).float()
+
+    label_accuracies = []
+    total_true_positive = torch.zeros(num_classes)
+    total_true = torch.zeros(num_classes)
+
+    for j in range(num_classes):
+        true_positive = torch.sum((pred_labels[:, j] == 1) & (labels[:, j] == 1))
+        total_true_positives = torch.sum(labels[:, j] == 1)
+
+        accuracy = true_positive / total_true_positives if total_true_positives > 0 else torch.tensor(0.0)
+        label_accuracies.append(accuracy.item())
+
+        total_true_positive[j] = true_positive
+        total_true[j] = total_true_positives
+
+    total_true_positive_sum = torch.sum(total_true_positive)
+    total_true_sum = torch.sum(total_true)
+    weighted_accuracy = total_true_positive_sum / total_true_sum if total_true_sum > 0 else torch.tensor(0.0)
+
+    return weighted_accuracy.item() * 100.0
 
 
 def f1_scores_multi_label(preds, labels, average='macro', threshold=0.5):

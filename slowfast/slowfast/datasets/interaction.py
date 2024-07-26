@@ -128,7 +128,6 @@ class Interaction(torch.utils.data.Dataset):
     def __len__(self):
         return len(self._path_to_videos)
 
-    # TODO: FIX THIS METHOD
     def __getitem__(self, index):
         """
         Given the video index, return the list of frames, label, and video
@@ -434,7 +433,7 @@ class Interaction(torch.utils.data.Dataset):
         for idx, row in data.iterrows():
             label = {
                     'UserAwkwardness': row['UserAwkwardness'],
-                    'RobotMistake': row['RobotMistake'],
+                    # 'RobotMistake': row['RobotMistake'],
                     'RobotInterruption': row['RobotInterruption'],
                     'RobotNonResponding': row['RobotNonResponding'],
                     'RobotInappropriateResponse': row['RobotInappropriateResponse'],

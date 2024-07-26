@@ -16,6 +16,7 @@ import slowfast.visualization.tensorboard_vis as tb
 import torch
 from slowfast.datasets import loader
 from slowfast.models import build_model
+from slowfast.utils import metrics
 from slowfast.utils.env import pathmgr
 from slowfast.utils.meters import AVAMeter, TestMeter
 
@@ -138,6 +139,13 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             all_preds = all_preds.cpu()
             all_labels = all_labels.cpu()
         if writer is not None:
+            # Log F1 score and average accuracies
+            f1 = test_meter.stats.get("f1_score")
+            avg_acc = test_meter.stats.get("avg_accuracy")
+            if f1 is not None and avg_acc is not None:
+                writer.add_scalars({"Test/F1_Score": f1}, global_step=cur_iter)
+                writer.add_scalars({"Test/Average_Acc": avg_acc}, global_step=cur_iter)
+
             writer.plot_eval(preds=all_preds, labels=all_labels)
 
         if cfg.TEST.SAVE_RESULTS_PATH != "":

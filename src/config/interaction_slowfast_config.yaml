@@ -2,18 +2,18 @@ TRAIN:
   ENABLE: True
   DATASET: Interaction
   BATCH_SIZE: 32
-  EVAL_PERIOD: 10
+  EVAL_PERIOD: 5
   CHECKPOINT_PERIOD: 5
   AUTO_RESUME: True
 DATA:
-  NUM_FRAMES: 4
+  NUM_FRAMES: 8
   SAMPLING_RATE: 2
   TRAIN_JITTER_SCALES: [256, 320]
   TRAIN_CROP_SIZE: 224
   TEST_CROP_SIZE: 256
   INPUT_CHANNEL_NUM: [3, 3]
   MULTI_LABEL: True
-  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/clip/2022/w1"
+  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/clip/2022/w4"
 SLOWFAST:
   ALPHA: 4
   BETA_INV: 8
@@ -21,9 +21,9 @@ SLOWFAST:
   FUSION_KERNEL_SZ: 7
 RESNET:
   ZERO_INIT_FINAL_BN: True
-  WIDTH_PER_GROUP: 64
+  WIDTH_PER_GROUP: 32 # 64
   NUM_GROUPS: 1
-  DEPTH: 18
+  DEPTH: 50
   TRANS_FUNC: bottleneck_transform
   STRIDE_1X1: False
   # NUM_BLOCK_TEMP_KERNEL: [[3, 3], [4, 4], [6, 6], [3, 3]]
@@ -38,45 +38,42 @@ BN:
   USE_PRECISE_STATS: True
   NUM_BATCHES_PRECISE: 200
 SOLVER:
-  BASE_LR: 1e-3
+  BASE_LR: 6e-4
   LR_POLICY: cosine
   MAX_EPOCH: 50
   MOMENTUM: 0.9
   WEIGHT_DECAY: 1e-4
-  WARMUP_EPOCHS: 8.0
+  WARMUP_EPOCHS: 6.0
   WARMUP_START_LR: 1e-4
   OPTIMIZING_METHOD: adam
 MODEL:
-  NUM_CLASSES: 5 # Actual num should be lower than this
+  NUM_CLASSES: 4
   ARCH: slowfast
   MODEL_NAME: SlowFast
   LOSS_FUNC: bce_logit
   DROPOUT_RATE: 0.5
 TEST:
-  ENABLE: False
+  ENABLE: True
   DATASET: Interaction
-  BATCH_SIZE: 32
+  BATCH_SIZE: 8
 DATA_LOADER:
-  NUM_WORKERS: 6
+  NUM_WORKERS: 4
   PIN_MEMORY: True
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: ../outputs/w1/slowfast
-
+OUTPUT_DIR: "../outputs/w4/slowfast"
 
 TENSORBOARD:
   ENABLE: True
+  CLASS_NAMES_PATH: "../src/config/class_id.json"
   MODEL_VIS:
-    ENABLE: False
+    ENABLE: True
     MODEL_WEIGHTS: False # Set to True to visualize model weights.
     ACTIVATIONS: False # Set to True to visualize feature maps.
     INPUT_VIDEO: False # Set to True to visualize the input video(s) for the corresponding feature maps.
-    LAYER_LIST: # List of layer names to visualize weights and activations for.
-      - 's5'
-      - 's4_fuse'
+    LAYER_LIST: ['s5','s4_fuse'] # List of layer names to visualize weights and activations for.
     GRAD_CAM:
-      ENABLE: False
-      LAYER_LIST: # List of CNN layers to use for Grad-CAM visualization method. # The number of layer must be equal to the number of pathway(s).
-        - 's5'
-        - 's4_fuse'
+      ENABLE: True
+      LAYER_LIST: ['s5', 's4_fuse'] # List of CNN layers to use for Grad-CAM visualization method. # The number of layer must be equal to the number of pathway(s).
+

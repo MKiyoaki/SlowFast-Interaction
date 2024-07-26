@@ -200,7 +200,7 @@ def train_epoch(
 
         else:
             top1_err, top5_err = None, None
-            f1_weighted, f1_macro, f1_micro = None, None, None
+            avg_acc = None
             if cfg.DATA.MULTI_LABEL:
                 # Gather all the predictions across all the devices.
                 if cfg.NUM_GPUS > 1:
@@ -209,14 +209,7 @@ def train_epoch(
                     loss.item(),
                     grad_norm.item(),
                 )
-                ks = [1, 5]
-                num_topks_correct = metrics.topks_correct_multi_label(preds, labels, ks)
-                top1_err, top5_err = [
-                    (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
-                ]
-                #f1_macro = metrics.f1_scores_multi_label(preds, labels, average='macro')
-                #f1_micro = metrics.f1_scores_multi_label(preds, labels, average='micro')
-                #f1_weighted = metrics.f1_scores_multi_label(preds, labels, average='weighted')
+                avg_acc = metrics.accuracies_multi_label(preds, labels)
 
             elif cfg.MASK.ENABLE:
                 # Gather all the predictions across all the devices.
@@ -273,11 +266,7 @@ def train_epoch(
                             "Train/loss": loss,
                             "Train/lr": lr,
                             "Train/grad_norm": grad_norm,
-                            "Train/Top1_err": top1_err,
-                            "Train/Top5_err": top5_err,
-                            # "Train/F1_macro": f1_macro,
-                            # "Train/F1_micro": f1_micro,
-                            # "Train/F1_weighted": f1_weighted,
+                            "Train/Average_accuracies": avg_acc,
                         },
                         global_step=data_size * cur_epoch + cur_iter,
                     )
@@ -319,14 +308,13 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
         writer (TensorboardWriter, optional): TensorboardWriter object
             to writer Tensorboard log.
     """
-
     # Evaluation mode enabled. The running stats would not be updated.
     model.eval()
     val_meter.iter_tic()
 
     for cur_iter, (inputs, labels, index, time, meta) in enumerate(val_loader):
         if cfg.NUM_GPUS:
-            # Transferthe data to the current GPU device.
+            # Transfer the data to the current GPU device.
             if isinstance(inputs, (list,)):
                 for i in range(len(inputs)):
                     inputs[i] = inputs[i].cuda(non_blocking=True)
@@ -394,6 +382,25 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
             if cfg.DATA.MULTI_LABEL:
                 if cfg.NUM_GPUS > 1:
                     preds, labels = du.all_gather([preds, labels])
+                # Compute F1 score
+                f1 = metrics.f1_scores_multi_label(preds, labels, average='weighted')
+                avg_acc = metrics.accuracies_multi_label(preds, labels)
+
+                val_meter.iter_toc()
+                # Update and log stats.
+                val_meter.update_stats(
+                    f1,
+                    avg_acc,
+                    batch_size
+                    * max(
+                        cfg.NUM_GPUS, 1
+                    ),  # If running  on CPU (cfg.NUM_GPUS == 1), use 1 to represent 1 CPU.
+                )
+
+                if writer is not None:
+                    writer.add_scalars({"Val/F1_Score": f1}, global_step=cur_epoch)
+                    writer.add_scalars({"Val/Average_Acc": avg_acc}, global_step=cur_epoch)
+
             else:
                 if cfg.DATA.IN22k_VAL_IN1K != "":
                     preds = preds[:, :1000]
