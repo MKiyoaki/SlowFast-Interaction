@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
-
+import os
 import pickle
 
+import cv2
 import numpy as np
 
 import slowfast.datasets.utils as data_utils
@@ -60,6 +61,7 @@ def run_visualization(vis_loader, model, cfg, writer=None):
         cfg.TENSORBOARD.CLASS_NAMES_PATH,
         cfg.TENSORBOARD.MODEL_VIS.TOPK_PREDS,
         cfg.TENSORBOARD.MODEL_VIS.COLORMAP,
+        thres=0.8,
     )
     if n_devices > 1:
         grad_cam_layer_ls = [
@@ -78,7 +80,7 @@ def run_visualization(vis_loader, model, cfg, writer=None):
         )
     logger.info("Finish drawing weights.")
     global_idx = -1
-    for inputs, labels, _, _, meta in tqdm.tqdm(vis_loader):
+    for inputs, labels, _, _, meta, filename in tqdm.tqdm(vis_loader):
         if cfg.NUM_GPUS:
             # Transfer the data to the current GPU device.
             if isinstance(inputs, (list,)):
@@ -172,6 +174,45 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                     global_idx, path_idx + 1
                                 ),
                             )
+                            if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR:
+                                dir = cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR
+
+                                # Create the corresponding subclass path for containing the video outputs
+                                class_names, _, _ = misc.get_class_names(cfg.TENSORBOARD.CLASS_NAMES_PATH, None, None)
+                                if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
+                                    class_labels = labels
+                                else:
+                                    class_labels = np.array(cur_preds[cur_batch_idx] > 0.5, dtype=int)  # Convert to binary labels
+                                for idx, label in enumerate(class_labels):
+                                    if label == 1.0:
+                                        class_name = class_names[idx]
+                                        class_dir = os.path.join(dir, class_name)
+                                        if not os.path.exists(class_dir):
+                                            os.makedirs(class_dir)
+
+                                        # Save the video to the corresponding class directory
+                                        video_filename = f"{filename[0]}_path_{path_idx}.avi"
+                                        video_path = os.path.join(class_dir, video_filename)
+
+                                        # TODO write videos to the folder
+                                        # Initialize VideoWriter
+                                        fourcc = cv2.VideoWriter_fourcc(*'XVID')  # or use 'MJPG', 'MP4V', etc.
+                                        frame_height, frame_width = video.shape[2:4]
+                                        video_writer = cv2.VideoWriter(video_path, fourcc, 30,
+                                                                       (frame_width, frame_height))  # 30 is the fps
+
+                                        # Write each frame to the video file
+                                        video_np = video.squeeze().permute(0, 2, 3,
+                                                                           1).cpu().numpy()  # Convert to numpy array and move to CPU
+                                        for frame in video_np:
+                                            # Ensure the frame is in uint8 format (0-255 range)
+                                            frame = np.clip(frame * 255, 0, 255).astype(np.uint8)
+                                            video_writer.write(frame)
+
+                                        video_writer.release()
+                                        print(f"Saved video to {video_path}")
+
+
                     if cfg.TENSORBOARD.MODEL_VIS.ACTIVATIONS:
                         writer.plot_weights_and_activations(
                             cur_activations,
@@ -191,7 +232,7 @@ def perform_wrong_prediction_vis(vis_loader, model, cfg):
             slowfast/config/defaults.py
     """
     wrong_prediction_visualizer = WrongPredictionVis(cfg=cfg)
-    for batch_idx, (inputs, labels, _, _) in tqdm.tqdm(enumerate(vis_loader)):
+    for batch_idx, (inputs, labels, _, _, _, _) in tqdm.tqdm(enumerate(vis_loader)):
         if cfg.NUM_GPUS:
             # Transfer the data to the current GPU device.
             if isinstance(inputs, (list,)):
@@ -273,7 +314,7 @@ def visualize(cfg):
         cu.load_test_checkpoint(cfg, model)
 
         # Create video testing loaders.
-        vis_loader = loader.construct_loader(cfg, "test")
+        vis_loader = loader.construct_loader(cfg, "vis")
 
         if cfg.DETECTION.ENABLE:
             assert cfg.NUM_GPUS == cfg.TEST.BATCH_SIZE or cfg.NUM_GPUS == 0

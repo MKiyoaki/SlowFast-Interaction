@@ -278,6 +278,8 @@ class TestMeter:
         self.ensemble_method = ensemble_method
         # Initialize tensors.
         self.video_preds = torch.zeros((num_videos, num_cls))
+        self.video_preds_list = []
+        self.labels_list = []
         if multi_label:
             self.video_preds -= 1e10
 
@@ -299,6 +301,8 @@ class TestMeter:
         """
         self.clip_count.zero_()
         self.video_preds.zero_()
+        self.video_preds_list = []
+        self.labels_list = []
         if self.multi_label:
             self.video_preds -= 1e10
         self.video_labels.zero_()
@@ -324,27 +328,31 @@ class TestMeter:
                     labels[ind].type(torch.FloatTensor),
                 )
             self.video_labels[vid_id] = labels[ind]
-            if self.ensemble_method == "sum":
-                self.video_preds[vid_id] += preds[ind]
-            elif self.ensemble_method == "max":
-                self.video_preds[vid_id] = torch.max(
-                    self.video_preds[vid_id], preds[ind]
-                )
-            else:
-                raise NotImplementedError(
-                    "Ensemble Method {} is not supported".format(self.ensemble_method)
-                )
+            if not self.multi_label:
+                if self.ensemble_method == "sum":
+                    self.video_preds[vid_id] += preds[ind]
+                elif self.ensemble_method == "max":
+                    self.video_preds[vid_id] = torch.max(
+                        self.video_preds[vid_id], preds[ind]
+                    )
+                else:
+                    raise NotImplementedError(
+                        "Ensemble Method {} is not supported".format(self.ensemble_method)
+                    )
             self.clip_count[vid_id] += 1
 
-            # Calculate F1 score and average accuracies
-            if self.multi_label:
-                preds_np = torch.sigmoid(self.video_preds).cpu().numpy()  # Sigmoid for multi-label
-                labels_np = self.video_labels.cpu().numpy()
-                self.stats["f1_score"] = metrics.f1_scores_multi_label(labels_np, preds_np, average='weighted')
-                self.stats["avg_accuracy"] = metrics.accuracies_multi_label(labels_np, preds_np)
-            else:
-                self.stats["f1_score"] = None
-                self.stats["avg_accuracy"] = None
+        if self.multi_label:
+            # Multi label case
+            self.video_preds_list.append(preds.mean(dim=0))
+            self.labels_list.append(labels.mean(dim=0))
+
+            # # Calculate F1 score and average accuracies
+            # if self.multi_label:
+            #     self.stats["f1_score"] = metrics.f1_scores_multi_label(preds, labels, average='weighted')
+            #     self.stats["avg_accuracy"] = metrics.accuracies_multi_label(preds, labels)
+            # else:
+            #     self.stats["f1_score"] = None
+            #     self.stats["avg_accuracy"] = None
 
     def log_iter_stats(self, cur_iter):
         """
@@ -360,9 +368,10 @@ class TestMeter:
             "eta": eta,
             "time_diff": self.iter_timer.seconds(),
         }
-        if self.stats.get("f1_score") is not None:
-            stats["f1_score"] = self.stats["f1_score"]
-            stats["avg_accuracy"] = self.stats["avg_accuracy"]
+        #
+        # if self.stats.get("f1_score") is not None:
+        #     stats["f1_score"] = self.stats["f1_score"]
+        #     stats["avg_accuracy"] = self.stats["avg_accuracy"]
         logging.log_json_stats(stats)
 
     def iter_tic(self):
@@ -401,13 +410,23 @@ class TestMeter:
 
         self.stats = {"split": "test_final"}
         if self.multi_label:
+            # multi label case
             mean_ap = get_map(
                 self.video_preds.cpu().numpy(), self.video_labels.cpu().numpy()
             )
+            # TODO Fix this
+            assert len(self.video_preds_list) == len(self.labels_list)
+            self.video_preds_tensor = torch.stack(self.video_preds_list)
+            self.video_labels_tensor = torch.stack(self.labels_list)
+            print(self.video_preds_tensor.shape)
+            print(self.video_labels_tensor.shape)
+
+            f1 = metrics.f1_scores_multi_label(self.video_preds_tensor,  self.video_labels_tensor, average="weighted")
+            avg_acc = metrics.accuracies_multi_label(self.video_preds_tensor,  self.video_labels_tensor)
             map_str = "{:.{prec}f}".format(mean_ap * 100.0, prec=2)
             self.stats["map"] = map_str
-            self.stats["top1_acc"] = map_str
-            self.stats["top5_acc"] = map_str
+            self.stats["f1"] = f1
+            self.stats["avg_acc"] = avg_acc
         else:
             num_topks_correct = metrics.topks_correct(
                 self.video_preds, self.video_labels, ks

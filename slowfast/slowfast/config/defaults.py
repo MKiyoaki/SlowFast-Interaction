@@ -1156,6 +1156,8 @@ _C.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL = False
 # Colormap to for text boxes and bounding boxes colors
 _C.TENSORBOARD.MODEL_VIS.GRAD_CAM.COLORMAP = "viridis"
 
+_C.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR = None
+
 # Config for visualization for wrong prediction visualization.
 # _C.TENSORBOARD.ENABLE must be True.
 _C.TENSORBOARD.WRONG_PRED_VIS = CfgNode()

@@ -266,7 +266,7 @@ def train_epoch(
                             "Train/loss": loss,
                             "Train/lr": lr,
                             "Train/grad_norm": grad_norm,
-                            "Train/Average_accuracies": avg_acc,
+                            # "Train/Average_accuracies": avg_acc,
                         },
                         global_step=data_size * cur_epoch + cur_iter,
                     )

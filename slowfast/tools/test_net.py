@@ -140,12 +140,6 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             all_labels = all_labels.cpu()
         if writer is not None:
             # Log F1 score and average accuracies
-            f1 = test_meter.stats.get("f1_score")
-            avg_acc = test_meter.stats.get("avg_accuracy")
-            if f1 is not None and avg_acc is not None:
-                writer.add_scalars({"Test/F1_Score": f1}, global_step=cur_iter)
-                writer.add_scalars({"Test/Average_Acc": avg_acc}, global_step=cur_iter)
-
             writer.plot_eval(preds=all_preds, labels=all_labels)
 
         if cfg.TEST.SAVE_RESULTS_PATH != "":
@@ -259,20 +253,36 @@ def test(cfg):
                 view, cfg.TEST.NUM_SPATIAL_CROPS
             )
         )
-        result_string_views += "_{}a{}" "".format(view, test_meter.stats["top1_acc"])
+        if not cfg.DATA.MULTI_LABEL:
+            result_string_views += "_{}a{}" "".format(view, test_meter.stats["top1_acc"])
 
-        result_string = (
-            "_p{:.2f}_f{:.2f}_{}a{} Top5 Acc: {} MEM: {:.2f} f: {:.4f}"
-            "".format(
-                params / 1e6,
-                flops,
-                view,
-                test_meter.stats["top1_acc"],
-                test_meter.stats["top5_acc"],
-                misc.gpu_mem_usage(),
-                flops,
+            result_string = (
+                "_p{:.2f}_f{:.2f}_{}a{} Top5 Acc: {} MEM: {:.2f} f: {:.4f}"
+                "".format(
+                    params / 1e6,
+                    flops,
+                    view,
+                    test_meter.stats["top1_acc"],
+                    test_meter.stats["top5_acc"],
+                    misc.gpu_mem_usage(),
+                    flops,
+                )
             )
-        )
+        else:
+            result_string_views += "_{}a{}" "".format(view, test_meter.stats["f1"])
+
+            result_string = (
+                "_p{:.2f}_f{:.2f}_{} F1: {:.2f} Avg Acc: {:.2f} MEM: {:.2f} f: {:.4f}"
+                "".format(
+                    params / 1e6,
+                    flops,
+                    view,
+                    test_meter.stats["f1"],
+                    test_meter.stats["avg_acc"],
+                    misc.gpu_mem_usage(),
+                    flops,
+                )
+            )
 
         logger.info("{}".format(result_string))
     logger.info("{}".format(result_string_views))

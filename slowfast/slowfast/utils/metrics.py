@@ -149,17 +149,16 @@ def accuracies_multi_label(preds, labels):
         weighted_accuracy (float):
     """
 
-    um_samples = preds.size(0)
-    num_classes = preds.size(1)
+    num_cls = preds.size(1)
 
-    pred_labels = (preds > 0.5).float()
+    preds = (preds > 0.5).float()
 
     label_accuracies = []
-    total_true_positive = torch.zeros(num_classes)
-    total_true = torch.zeros(num_classes)
+    total_true_positive = torch.zeros(num_cls)
+    total_true = torch.zeros(num_cls)
 
-    for j in range(num_classes):
-        true_positive = torch.sum((pred_labels[:, j] == 1) & (labels[:, j] == 1))
+    for j in range(num_cls):
+        true_positive = torch.sum((preds[:, j] == 1) & (labels[:, j] == 1))
         total_true_positives = torch.sum(labels[:, j] == 1)
 
         accuracy = true_positive / total_true_positives if total_true_positives > 0 else torch.tensor(0.0)
@@ -195,6 +194,7 @@ def f1_scores_multi_label(preds, labels, average='macro', threshold=0.5):
     labels = np.array(labels)
 
     preds = (preds >= threshold).astype(int)
+    labels = (labels >= threshold).astype(int)
 
     zero_division = 0
 
