@@ -414,12 +414,9 @@ class TestMeter:
             mean_ap = get_map(
                 self.video_preds.cpu().numpy(), self.video_labels.cpu().numpy()
             )
-            # TODO Fix this
             assert len(self.video_preds_list) == len(self.labels_list)
             self.video_preds_tensor = torch.stack(self.video_preds_list)
             self.video_labels_tensor = torch.stack(self.labels_list)
-            print(self.video_preds_tensor.shape)
-            print(self.video_labels_tensor.shape)
 
             f1 = metrics.f1_scores_multi_label(self.video_preds_tensor,  self.video_labels_tensor, average="weighted")
             avg_acc = metrics.accuracies_multi_label(self.video_preds_tensor,  self.video_labels_tensor)
@@ -436,6 +433,7 @@ class TestMeter:
             for k, topk in zip(ks, topks):
                 # self.stats["top{}_acc".format(k)] = topk.cpu().numpy()
                 self.stats["top{}_acc".format(k)] = "{:.{prec}f}".format(topk, prec=2)
+            self.stats["f1"] = metrics.f1_scores(self.video_preds, self.video_labels, average="weighted")
         logging.log_json_stats(self.stats)
 
 

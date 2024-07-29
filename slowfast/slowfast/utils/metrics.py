@@ -13,9 +13,9 @@ def topks_correct(preds, labels, ks):
     number of correct predictions for each top-k value.
 
     Args:
-        preds (array): array of predictions. Dimension is batchsize
+        preds (tensor): array of predictions. Dimension is batchsize
             N x ClassNum.
-        labels (array): array of labels. Dimension is batchsize N.
+        labels (tensor): array of labels. Dimension is batchsize N.
         ks (list): list of top-k values. For example, ks = [1, 5] correspods
             to top-1 and top-5.
 
@@ -23,24 +23,33 @@ def topks_correct(preds, labels, ks):
         topks_correct (list): list of numbers, where the `i`-th entry
             corresponds to the number of top-`ks[i]` correct predictions.
     """
-    assert preds.size(0) == labels.size(0), "Batch dim of predictions and labels must match"
+    # Ensure all tensors are on the same device
+    device = preds.device
+    labels = labels.to(device)
+
+    assert preds.size(0) == labels.size(0), "Batch dimension of predictions and labels must match"
 
     # Get the top max_k predictions for each sample
     max_k = max(ks)
-    _top_max_k_vals, top_max_k_inds = torch.topk(preds, max_k, dim=1, largest=True, sorted=True)
+    _, top_max_k_inds = torch.topk(preds, max_k, dim=1, largest=True, sorted=True)
 
-    # Create a mask for top_k predictions
-    top_max_k_mask = torch.zeros_like(preds, dtype=torch.bool)
-    batch_size = preds.size(0)
+    # Convert labels to one-hot encoding
+    batch_size, num_classes = preds.size()
+    labels_one_hot = torch.zeros(batch_size, num_classes, dtype=torch.bool, device=device)
+    labels_one_hot[torch.arange(batch_size, device=device), labels] = True
 
-    for i in range(batch_size):
-        top_max_k_mask[i, top_max_k_inds[i]] = True
+    topks_correct = []
+    for k in ks:
+        # Create a mask for top-k predictions
+        top_k_mask = torch.zeros_like(preds, dtype=torch.bool, device=device)
+        for i in range(batch_size):
+            top_k_mask[i, top_max_k_inds[i, :k]] = True
 
-    # Check if any of the top-k predictions for each instance are in the true labels
-    top_max_k_correct = top_max_k_mask & labels.bool()
+        # Compute the correct predictions
+        correct_predictions = top_k_mask & labels_one_hot
+        topk_correct_count = correct_predictions.any(dim=1).sum().item()
+        topks_correct.append(topk_correct_count)
 
-    # Count the number of correct predictions for each k
-    topks_correct = [top_max_k_correct[:, :k].any(dim=1).sum().item() for k in ks]
     return topks_correct
 
 
@@ -172,6 +181,32 @@ def accuracies_multi_label(preds, labels):
     weighted_accuracy = total_true_positive_sum / total_true_sum if total_true_sum > 0 else torch.tensor(0.0)
 
     return weighted_accuracy.item() * 100.0
+
+
+def f1_scores(preds, labels, average='macro'):
+    """
+    Computes the F1 score for single label classification.
+
+    Args:
+        preds (tensor): Predictions with probabilities or scores, shape (N, ClassNum).
+        average (str): Averaging method for F1 score. Options are 'micro', 'macro', 'weighted', or 'samples'.
+
+    Returns:
+        f1_score (float): F1 score for multi-label classification.
+    """
+    # Convert tensors to numpy arrays
+    preds = preds.detach().cpu().numpy()
+    labels = labels.detach().cpu().numpy()
+
+    preds = np.argmax(preds, axis=1)
+
+    zero_division = 0
+
+    # Binarize predictions
+    f1 = f1_score(labels, preds, average=average, zero_division=zero_division)
+
+    return f1
+
 
 
 def f1_scores_multi_label(preds, labels, average='macro', threshold=0.5):

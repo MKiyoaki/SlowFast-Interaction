@@ -257,19 +257,20 @@ def test(cfg):
             result_string_views += "_{}a{}" "".format(view, test_meter.stats["top1_acc"])
 
             result_string = (
-                "_p{:.2f}_f{:.2f}_{}a{} Top5 Acc: {} MEM: {:.2f} f: {:.4f}"
+                "_p{:.2f}_f{:.2f}_{} Top1 Acc: {} F1: {:.2f} Top5 Acc: {} MEM: {:.2f} f: {:.4f}"
                 "".format(
                     params / 1e6,
                     flops,
                     view,
                     test_meter.stats["top1_acc"],
+                    test_meter.stats["f1"],
                     test_meter.stats["top5_acc"],
                     misc.gpu_mem_usage(),
                     flops,
                 )
             )
         else:
-            result_string_views += "_{}a{}" "".format(view, test_meter.stats["f1"])
+            result_string_views += "_{}a{:.2f}" "".format(view, test_meter.stats["f1"])
 
             result_string = (
                 "_p{:.2f}_f{:.2f}_{} F1: {:.2f} Avg Acc: {:.2f} MEM: {:.2f} f: {:.4f}"

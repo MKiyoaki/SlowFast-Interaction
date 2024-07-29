@@ -200,7 +200,6 @@ def train_epoch(
 
         else:
             top1_err, top5_err = None, None
-            avg_acc = None
             if cfg.DATA.MULTI_LABEL:
                 # Gather all the predictions across all the devices.
                 if cfg.NUM_GPUS > 1:
@@ -209,7 +208,6 @@ def train_epoch(
                     loss.item(),
                     grad_norm.item(),
                 )
-                avg_acc = metrics.accuracies_multi_label(preds, labels)
 
             elif cfg.MASK.ENABLE:
                 # Gather all the predictions across all the devices.
@@ -241,8 +239,8 @@ def train_epoch(
                 loss, grad_norm, top1_err, top5_err = (
                     loss.item(),
                     grad_norm.item(),
-                    top1_err.item(),
-                    top5_err.item(),
+                    top1_err,
+                    top5_err,
                 )
 
             # Update and log stats.
@@ -415,7 +413,7 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
                     top1_err, top5_err = du.all_reduce([top1_err, top5_err])
 
                 # Copy the errors from GPU to CPU (sync point).
-                top1_err, top5_err = top1_err.item(), top5_err.item()
+                # top1_err, top5_err = top1_err.item(), top5_err.item()
 
                 val_meter.iter_toc()
                 # Update and log stats.

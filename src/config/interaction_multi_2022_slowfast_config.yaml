@@ -1,5 +1,5 @@
 TRAIN:
-  ENABLE: True
+  ENABLE: False
   DATASET: Interaction
   BATCH_SIZE: 32
   EVAL_PERIOD: 5
@@ -13,7 +13,7 @@ DATA:
   TEST_CROP_SIZE: 256
   INPUT_CHANNEL_NUM: [3, 3]
   MULTI_LABEL: True
-  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/clip/2022/w4"
+  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/clip/2022/w1"
 SLOWFAST:
   ALPHA: 4
   BETA_INV: 8
@@ -40,7 +40,7 @@ BN:
 SOLVER:
   BASE_LR: 6e-4
   LR_POLICY: cosine
-  MAX_EPOCH: 14
+  MAX_EPOCH: 20
   MOMENTUM: 0.9
   WEIGHT_DECAY: 1e-4
   WARMUP_EPOCHS: 4.0
@@ -53,7 +53,7 @@ MODEL:
   LOSS_FUNC: bce_logit
   DROPOUT_RATE: 0.5
 TEST:
-  ENABLE: True
+  ENABLE: False
   DATASET: Interaction
   BATCH_SIZE: 16
 DATA_LOADER:
@@ -62,12 +62,12 @@ DATA_LOADER:
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: "../outputs/w4/slowfast"
+OUTPUT_DIR: "../outputs/interaction_multi/2022/w1/slowfast"
 TENSORBOARD:
   ENABLE: True
-  CLASS_NAMES_PATH: "../src/config/class_id.json"
+  CLASS_NAMES_PATH: "../src/config/class_id_multi.json"
   MODEL_VIS:
-    ENABLE: False
+    ENABLE: True
     MODEL_WEIGHTS: False
     ACTIVATIONS: False
     INPUT_VIDEO: False
@@ -75,5 +75,5 @@ TENSORBOARD:
     GRAD_CAM:
       ENABLE: True
       USE_TRUE_LABEL: False
-      OUTPUT_DIR: "../outputs/w1/slowfast/grad_cam"
+      # OUTPUT_DIR: "../outputs/w1/slowfast/grad_cam"
       LAYER_LIST: ['s5', 's4_fuse'] # The number of layer must be equal to the number of pathway(s).

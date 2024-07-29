@@ -7,7 +7,8 @@ from .charades import Charades  # noqa
 from .imagenet import Imagenet  # noqa
 from .kinetics import Kinetics  # noqa
 from .ssv2 import Ssv2  # noqa
-from .interaction import Interaction
+from .interaction2022 import Interaction
+from .interaction_unary import Interactionunary
 
 try:
     from .ptv_datasets import Ptvcharades, Ptvkinetics, Ptvssv2  # noqa

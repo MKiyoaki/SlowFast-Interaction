@@ -160,58 +160,57 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                 if cfg.DETECTION.ENABLE
                                 else cur_preds[cur_batch_idx]
                             )
-                            video = video_vis.draw_clip(
-                                video, cur_prediction, bboxes=bboxes
-                            )
-                            video = (
-                                torch.from_numpy(np.array(video))
-                                .permute(0, 3, 1, 2)
-                                .unsqueeze(0)
-                            )
-                            writer.add_video(
-                                video,
-                                tag="Input {}/Pathway {}".format(
-                                    global_idx, path_idx + 1
-                                ),
-                            )
-                            if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR:
-                                dir = cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR
 
-                                # Create the corresponding subclass path for containing the video outputs
+                            all_preds = []
+                            if cfg.DATA.MULTI_LABEL:
+                                for class_idx in range(cur_prediction.shape[0]):  # For each class
+                                    # Create a binary label for the current class
+                                    binary_labels = torch.zeros_like(cur_prediction)
+                                    if cur_prediction[class_idx] >= 0.5:
+                                        binary_labels[class_idx] = 1.0
+                                        all_preds.append(binary_labels)
+                            else:
+                                all_preds.append(cur_prediction)
+
+                            for cur_prediction in all_preds:
                                 class_names, _, _ = misc.get_class_names(cfg.TENSORBOARD.CLASS_NAMES_PATH, None, None)
-                                if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
-                                    class_labels = labels
-                                else:
-                                    class_labels = np.array(cur_preds[cur_batch_idx] > 0.5, dtype=int)  # Convert to binary labels
-                                for idx, label in enumerate(class_labels):
-                                    if label == 1.0:
-                                        class_name = class_names[idx]
-                                        class_dir = os.path.join(dir, class_name)
-                                        if not os.path.exists(class_dir):
-                                            os.makedirs(class_dir)
+                                video = video_vis.draw_clip(
+                                    video, cur_prediction, bboxes=bboxes
+                                )
+                                video = (
+                                    torch.from_numpy(np.array(video))
+                                    .permute(0, 3, 1, 2)
+                                    .unsqueeze(0)
+                                )
+                                for cls_idx in range(len(class_names)):
+                                    if cur_prediction[cls_idx] == 1.0:
+                                        writer.add_video(
+                                            video,
+                                            tag="Cls {}/File {}/Input {}, Pathway {}".format(
+                                                class_names[cls_idx], filename[0], global_idx, path_idx + 1
+                                            ),
+                                        )
+                                print(filename[0], cur_prediction)
+                                if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR:
+                                    dir = os.path.join(cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR, "Path_" + str(path_idx))
 
-                                        # Save the video to the corresponding class directory
-                                        video_filename = f"{filename[0]}_path_{path_idx}.avi"
-                                        video_path = os.path.join(class_dir, video_filename)
+                                    # Create the corresponding subclass path for containing the video outputs
+                                    if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
+                                        class_labels = labels
+                                    else:
+                                        class_labels = np.array(cur_preds[cur_batch_idx] > 0.5, dtype=int)  # Convert to binary labels
+                                    for idx, label in enumerate(class_labels):
+                                        if label == 1.0:
+                                            class_name = class_names[idx]
+                                            class_dir = os.path.join(dir, class_name)
+                                            if not os.path.exists(class_dir):
+                                                os.makedirs(class_dir)
 
-                                        # TODO write videos to the folder
-                                        # Initialize VideoWriter
-                                        fourcc = cv2.VideoWriter_fourcc(*'XVID')  # or use 'MJPG', 'MP4V', etc.
-                                        frame_height, frame_width = video.shape[2:4]
-                                        video_writer = cv2.VideoWriter(video_path, fourcc, 30,
-                                                                       (frame_width, frame_height))  # 30 is the fps
+                                            # Save the video to the corresponding class directory
+                                            video_filename = f"{filename[0]}_path.avi"
+                                            video_path = os.path.join(class_dir, video_filename)
 
-                                        # Write each frame to the video file
-                                        video_np = video.squeeze().permute(0, 2, 3,
-                                                                           1).cpu().numpy()  # Convert to numpy array and move to CPU
-                                        for frame in video_np:
-                                            # Ensure the frame is in uint8 format (0-255 range)
-                                            frame = np.clip(frame * 255, 0, 255).astype(np.uint8)
-                                            video_writer.write(frame)
-
-                                        video_writer.release()
-                                        print(f"Saved video to {video_path}")
-
+                                            # TODO write videos to the folder
 
                     if cfg.TENSORBOARD.MODEL_VIS.ACTIVATIONS:
                         writer.plot_weights_and_activations(

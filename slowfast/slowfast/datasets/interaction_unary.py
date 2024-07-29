@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 
 
 @DATASET_REGISTRY.register()
-class Interaction(torch.utils.data.Dataset):
+class Interactionunary(torch.utils.data.Dataset):
     """
     Interaction dataset loader. Construct the Interaction dataset loader, then sample
     clips from the videos.
@@ -88,8 +88,7 @@ class Interaction(torch.utils.data.Dataset):
         Construct the video loader.
         """
         path_to_file = os.path.join(
-            self.cfg.DATA.PATH_TO_DATA_DIR, f"{self.mode}.csv" if self.mode != "vis" else
-            "test.csv"
+            self.cfg.DATA.PATH_TO_DATA_DIR, f"{self.mode}.csv"
         )  # train.csv / test.csv / val.csv
         assert pathmgr.exists(path_to_file), "{} dir not found".format(path_to_file)
 
@@ -172,7 +171,7 @@ class Interaction(torch.utils.data.Dataset):
                 min_scale = int(
                     round(float(min_scale) * crop_size / self.cfg.MULTIGRID.DEFAULT_S)
                 )
-        elif self.mode in ["test", "vis"]:
+        elif self.mode in ["test"]:
             temporal_sample_index = (
                     self._spatial_temporal_idx[index] // self.cfg.TEST.NUM_SPATIAL_CROPS
             )
@@ -186,6 +185,14 @@ class Interaction(torch.utils.data.Dataset):
                 if self.cfg.TEST.NUM_SPATIAL_CROPS > 1
                 else [self.cfg.DATA.TRAIN_JITTER_SCALES[0]] * 2
                      + [self.cfg.DATA.TEST_CROP_SIZE]
+            )
+        elif self.mode in ["vis"]:
+            temporal_sample_index = (
+                    self._spatial_temporal_idx[index] // self.cfg.TEST.NUM_SPATIAL_CROPS
+            )
+            spatial_sample_index = 1
+            min_scale, max_scale, crop_size = (
+                [self.cfg.DATA.TRAIN_JITTER_SCALES[0]] * 2 + [self.cfg.DATA.TEST_CROP_SIZE]
             )
             assert len({min_scale, max_scale}) == 1
         else:
@@ -435,18 +442,25 @@ class Interaction(torch.utils.data.Dataset):
             labels (dict): the labels for the video.
         """
         data = pd.read_csv(label_path)
-        label = {}
+        binary_str = ''
         for idx, row in data.iterrows():
-            label = {
-                    'UserAwkwardness': row['UserAwkwardness'],
-                    'RobotInterruption': row['RobotInterruption'],
-                    'RobotNonResponding': row['RobotNonResponding'],
-                    'RobotInappropriateResponse': row['RobotInappropriateResponse'],
-                }
+            # Extract the label values and convert them to binary strings
+            user_awkwardness = str(int(row['UserAwkwardness']))
+            robot_interruption = str(int(row['RobotInterruption']))
+            robot_non_responding = str(int(row['RobotNonResponding']))
+            robot_inappropriate_response = str(int(row['RobotInappropriateResponse']))
 
-        # Convert the binary string to a decimal integer
-        label_tensor = torch.tensor(list(label.values()), dtype=torch.float32)
-        return label_tensor
+            # Concatenate these binary strings into a single binary string
+            binary_str = (robot_inappropriate_response +
+                          robot_non_responding +
+                          robot_interruption +
+                          user_awkwardness)
+
+            # Convert the binary string to a decimal integer
+        if binary_str:
+            return int(binary_str, 2)
+        else:
+            return 0  # Return 0 if binary_str is empty
 
     def _get_chunk(self, file_obj, chunk_size):
         """

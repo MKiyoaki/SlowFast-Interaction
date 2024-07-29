@@ -56,11 +56,11 @@ DATA_LOADER:
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: "../outputs/w4/c2d"
+OUTPUT_DIR: "../outputs/interaction_un/2022/w4/slowfast"
 
 TENSORBOARD:
   ENABLE: True
-  CLASS_NAMES_PATH: "../src/config/class_id.json"
+  CLASS_NAMES_PATH: "../src/config/class_id_multi.json"
   MODEL_VIS:
     ENABLE: True
     MODEL_WEIGHTS: False # Set to True to visualize model weights.
