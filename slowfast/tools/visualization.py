@@ -5,6 +5,7 @@ import pickle
 
 import cv2
 import numpy as np
+import torchvision
 
 import slowfast.datasets.utils as data_utils
 import slowfast.utils.checkpoint as cu
@@ -167,7 +168,7 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                     # Create a binary label for the current class
                                     binary_labels = torch.zeros_like(cur_prediction)
                                     if cur_prediction[class_idx] >= 0.5:
-                                        binary_labels[class_idx] = 1.0
+                                        binary_labels[class_idx] = cur_prediction[class_idx]
                                         all_preds.append(binary_labels)
                             else:
                                 all_preds.append(cur_prediction)
@@ -182,15 +183,23 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                     .permute(0, 3, 1, 2)
                                     .unsqueeze(0)
                                 )
-                                for cls_idx in range(len(class_names)):
-                                    if cur_prediction[cls_idx] == 1.0:
+                                if len(class_names) > 1:
+                                    for cls_idx in range(len(class_names)):
+                                        if cur_prediction[cls_idx] > 0.0:
+                                            writer.add_video(
+                                                video,
+                                                tag="Cls {}/File {}/Input {}, Pathway {}".format(
+                                                    class_names[cls_idx], filename[0], global_idx, path_idx + 1
+                                                ),
+                                            )
+                                else:
+                                    if cur_prediction > 0.0:
                                         writer.add_video(
                                             video,
                                             tag="Cls {}/File {}/Input {}, Pathway {}".format(
-                                                class_names[cls_idx], filename[0], global_idx, path_idx + 1
+                                                class_names[0], filename[0], global_idx, path_idx + 1
                                             ),
                                         )
-                                print(filename[0], cur_prediction)
                                 if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR:
                                     dir = os.path.join(cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR, "Path_" + str(path_idx))
 
@@ -207,10 +216,14 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                                 os.makedirs(class_dir)
 
                                             # Save the video to the corresponding class directory
-                                            video_filename = f"{filename[0]}_path.avi"
+                                            video_filename = f"{filename[0]}_path.mp4"
                                             video_path = os.path.join(class_dir, video_filename)
 
-                                            # TODO write videos to the folder
+                                            # TODO test on this
+                                            video = video.squeeze(0).permute(0, 2, 3, 1)
+                                            video = (video * 255).to(torch.uint8)
+                                            torchvision.io.write_video(video_path, video, fps=30)
+
 
                     if cfg.TENSORBOARD.MODEL_VIS.ACTIVATIONS:
                         writer.plot_weights_and_activations(

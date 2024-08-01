@@ -10,7 +10,7 @@ from helper.interaction_data_process import dataset_split, video_clip_by_duratio
 
 def main():
     # Split dataset into train, validation, and test sets
-    video_clip_by_duration(raw_video_dir, raw_label_dir, data_dir)
+    # video_clip_by_duration(raw_video_dir, raw_label_dir, data_dir)
     train_file, val_file, test_file = dataset_split(video_dir, label_dir, data_dir)
 
     return 0

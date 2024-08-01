@@ -320,7 +320,7 @@ class TestMeter:
             clip_ids (tensor): clip indexes of the current batch, dimension is
                 N.
         """
-        for ind in range(preds.shape[0]):
+        for ind in range(preds.shape[0]):   # batch_size
             vid_id = int(clip_ids[ind]) // self.num_clips
             if self.video_labels[vid_id].sum() > 0:
                 assert torch.equal(
@@ -345,14 +345,6 @@ class TestMeter:
             # Multi label case
             self.video_preds_list.append(preds.mean(dim=0))
             self.labels_list.append(labels.mean(dim=0))
-
-            # # Calculate F1 score and average accuracies
-            # if self.multi_label:
-            #     self.stats["f1_score"] = metrics.f1_scores_multi_label(preds, labels, average='weighted')
-            #     self.stats["avg_accuracy"] = metrics.accuracies_multi_label(preds, labels)
-            # else:
-            #     self.stats["f1_score"] = None
-            #     self.stats["avg_accuracy"] = None
 
     def log_iter_stats(self, cur_iter):
         """
@@ -425,9 +417,14 @@ class TestMeter:
             self.stats["f1"] = f1
             self.stats["avg_acc"] = avg_acc
         else:
-            num_topks_correct = metrics.topks_correct(
-                self.video_preds, self.video_labels, ks
-            )
+            # Compute the errors.
+            if self.video_preds.shape[1] >= 5:
+                num_topks_correct = metrics.topks_correct(self.video_preds, self.video_labels, [1, 5])
+            elif self.video_preds.shape[1] > 1:
+                num_topks_correct = metrics.topks_correct(self.video_preds, self.video_labels, [1])
+            else:
+                num_topks_correct = metrics.topks_correct_binary(self.video_preds, self.video_labels, [1])
+
             topks = [(x / self.video_preds.size(0)) * 100.0 for x in num_topks_correct]
             assert len({len(ks), len(topks)}) == 1
             for k, topk in zip(ks, topks):

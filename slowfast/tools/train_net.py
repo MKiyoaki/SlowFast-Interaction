@@ -225,10 +225,24 @@ def train_epoch(
                     loss_extra = [one_loss.item() for one_loss in loss_extra]
             else:
                 # Compute the errors.
-                num_topks_correct = metrics.topks_correct(preds, labels, (1, 5))
-                top1_err, top5_err = [
-                    (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
-                ]
+                if cfg.MODEL.NUM_CLASSES >= 5:
+                    num_topks_correct = metrics.topks_correct(preds, labels, [1, 5])
+                    top1_err, top5_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ]
+                elif cfg.MODEL.NUM_CLASSES > 1:
+                    num_topks_correct = metrics.topks_correct(preds, labels, [1])
+                    top1_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ][0]
+                    top5_err = -1.0
+                else:
+                    num_topks_correct = metrics.topks_correct_binary(preds, labels, [1])
+                    top1_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ][0]
+                    top5_err = -1.0
+
                 # Gather all the predictions across all the devices.
                 if cfg.NUM_GPUS > 1:
                     loss, grad_norm, top1_err, top5_err = du.all_reduce(
@@ -275,6 +289,7 @@ def train_epoch(
                             "Train/lr": lr,
                             "Train/Top1_err": top1_err,
                             "Train/Top5_err": top5_err,
+                            "Train/grad_norm": grad_norm,
                         },
                         global_step=data_size * cur_epoch + cur_iter,
                     )
@@ -380,9 +395,13 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
             if cfg.DATA.MULTI_LABEL:
                 if cfg.NUM_GPUS > 1:
                     preds, labels = du.all_gather([preds, labels])
+
+                loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
+
                 # Compute F1 score
                 f1 = metrics.f1_scores_multi_label(preds, labels, average='weighted')
                 avg_acc = metrics.accuracies_multi_label(preds, labels)
+                loss = loss_fun(preds, labels)
 
                 val_meter.iter_toc()
                 # Update and log stats.
@@ -396,19 +415,33 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
                 )
 
                 if writer is not None:
+                    writer.add_scalars({"Val/Loss": loss}, global_step=cur_epoch)
                     writer.add_scalars({"Val/F1_Score": f1}, global_step=cur_epoch)
                     writer.add_scalars({"Val/Average_Acc": avg_acc}, global_step=cur_epoch)
 
             else:
                 if cfg.DATA.IN22k_VAL_IN1K != "":
                     preds = preds[:, :1000]
-                # Compute the errors.
-                num_topks_correct = metrics.topks_correct(preds, labels, (1, 5))
 
-                # Combine the errors across the GPUs.
-                top1_err, top5_err = [
-                    (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
-                ]
+                # Compute the errors.
+                if cfg.MODEL.NUM_CLASSES >= 5:
+                    num_topks_correct = metrics.topks_correct(preds, labels, [1, 5])
+                    top1_err, top5_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ]
+                elif cfg.MODEL.NUM_CLASSES > 1:
+                    num_topks_correct = metrics.topks_correct(preds, labels, [1])
+                    top1_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ][0]
+                    top5_err = -1.0
+                else:
+                    num_topks_correct = metrics.topks_correct_binary(preds, labels, [1])
+                    top1_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ][0]
+                    top5_err = -1.0
+
                 if cfg.NUM_GPUS > 1:
                     top1_err, top5_err = du.all_reduce([top1_err, top5_err])
 

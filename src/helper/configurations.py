@@ -1,7 +1,7 @@
 import os
 
 year = "2022"
-w_num = "w3"
+w_num = "w4"
 
 # project dir
 proj_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

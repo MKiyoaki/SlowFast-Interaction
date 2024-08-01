@@ -7,7 +7,8 @@ from .charades import Charades  # noqa
 from .imagenet import Imagenet  # noqa
 from .kinetics import Kinetics  # noqa
 from .ssv2 import Ssv2  # noqa
-from .interaction2022 import Interaction
+from .interaction import Interaction
+from .interaction_variant import Interaction_ua_2022, Interaction_ri_2022, Interaction_rnr_2022, Interaction_rir_2022
 from .interaction_unary import Interactionunary
 
 try:

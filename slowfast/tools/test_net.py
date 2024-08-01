@@ -15,7 +15,7 @@ import slowfast.utils.misc as misc
 import slowfast.visualization.tensorboard_vis as tb
 import torch
 from slowfast.datasets import loader
-from slowfast.models import build_model
+from slowfast.models import build_model, losses
 from slowfast.utils import metrics
 from slowfast.utils.env import pathmgr
 from slowfast.utils.meters import AVAMeter, TestMeter
@@ -127,6 +127,15 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         if not cfg.VIS_MASK.ENABLE:
             # Update and log stats.
             test_meter.update_stats(preds.detach(), labels.detach(), video_idx.detach())
+
+        loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
+        loss = loss_fun(preds, labels)
+        if writer is not None:
+            writer.add_scalars(
+                {"Train/loss": loss},
+                global_step=cur_iter,
+            )
+
         test_meter.log_iter_stats(cur_iter)
 
         test_meter.iter_tic()

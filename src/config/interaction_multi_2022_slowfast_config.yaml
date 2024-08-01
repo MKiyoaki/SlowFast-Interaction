@@ -1,8 +1,8 @@
 TRAIN:
-  ENABLE: False
+  ENABLE: True
   DATASET: Interaction
   BATCH_SIZE: 32
-  EVAL_PERIOD: 5
+  EVAL_PERIOD: 2
   CHECKPOINT_PERIOD: 5
   AUTO_RESUME: True
 DATA:
@@ -38,34 +38,34 @@ BN:
   USE_PRECISE_STATS: True
   NUM_BATCHES_PRECISE: 200
 SOLVER:
-  BASE_LR: 6e-4
+  BASE_LR: 1e-3
   LR_POLICY: cosine
-  MAX_EPOCH: 20
+  MAX_EPOCH: 10
   MOMENTUM: 0.9
   WEIGHT_DECAY: 1e-4
-  WARMUP_EPOCHS: 4.0
-  WARMUP_START_LR: 1e-4
+  WARMUP_EPOCHS: 2.0
+  WARMUP_START_LR: 6e-4
   OPTIMIZING_METHOD: adam
 MODEL:
-  NUM_CLASSES: 4
+  NUM_CLASSES: 2
   ARCH: slowfast
   MODEL_NAME: SlowFast
   LOSS_FUNC: bce_logit
   DROPOUT_RATE: 0.5
 TEST:
-  ENABLE: False
+  ENABLE: True
   DATASET: Interaction
   BATCH_SIZE: 16
 DATA_LOADER:
-  NUM_WORKERS: 2
+  NUM_WORKERS: 6
   PIN_MEMORY: True
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: "../outputs/interaction_multi/2022/w1/slowfast"
+OUTPUT_DIR: "../outputs/interaction/2022/w1/slowfast/multi"
 TENSORBOARD:
   ENABLE: True
-  CLASS_NAMES_PATH: "../src/config/class_id_multi.json"
+  CLASS_NAMES_PATH: "../src/config/names/class_id_2022.json"
   MODEL_VIS:
     ENABLE: True
     MODEL_WEIGHTS: False

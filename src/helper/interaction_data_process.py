@@ -5,6 +5,7 @@ import pandas as pd
 import time
 
 from moviepy.video.io.VideoFileClip import VideoFileClip
+from sklearn.model_selection import train_test_split
 
 
 def video_clip_by_duration(raw_data_path, raw_label_path, clip_data_path):
@@ -72,15 +73,13 @@ def get_label(label_path):
     return labels
 
 
-def dataset_split(data_path, label_path, collection_path, train_scales=0.8, val_scales=0.1, test_scales=0.1):
+def dataset_split(data_path, label_path, output_path, train_scales=0.8, val_scales=0.1, test_scales=0.1):
     """
-    Create annotated csv files containing video paths and their labels. Initially split by
-    0.8 : 0.1 : 0.1
-    for train, validation and test sets.
-
+    Create annotated csv files containing video paths and their labels. Split by
+    0.8 : 0.1 : 0.1 for train, validation, and test sets with stratified sampling.
     :param data_path: Path to video data directory
     :param label_path: Path to label data directory
-    :param collection_path: Path to save CSV collection files
+    :param output_path: Path to save CSV collection files
     :param train_scales: Scale of training dataset
     :param val_scales: Scale of validation dataset
     :param test_scales: Scale of testing dataset
@@ -91,57 +90,59 @@ def dataset_split(data_path, label_path, collection_path, train_scales=0.8, val_
     video_names = os.listdir(data_path)
     label_names = os.listdir(label_path)
 
-    # Step 2: Check if collection_path exists, if not, create it
-    if not os.path.exists(collection_path):
-        os.makedirs(collection_path)
+    # Step 2: Create a mapping of video to labels
+    video_to_label = {}
+    for video_name in video_names:
+        label_file = find_label_file(video_name, label_names)
+        if label_file:
+            labels_df = pd.read_csv(os.path.join(label_path, label_file))
+            # Extract only the label columns (ignore start_time and end_time)
+            label_columns = ['UserAwkwardness', 'RobotMistake', 'RobotNonResponding']
+            video_to_label[video_name] = labels_df[label_columns].iloc[0].to_dict()  # Adjust if necessary
 
-    # Step 3: Shuffle indices for random splitting
-    current_data_length = len(video_names)
-    current_data_index_list = list(range(current_data_length))
-    random.shuffle(current_data_index_list)
+    # Create a DataFrame from video_to_label
+    df = pd.DataFrame(list(video_to_label.items()), columns=['video_name', 'labels'])
 
-    # Step 4: Calculate split sizes
-    train_size = int(train_scales * current_data_length)
-    val_size = int(val_scales * current_data_length)
-    test_size = current_data_length - train_size - val_size
+    # Step 3: Convert labels to a categorical format for stratification
+    df['labels'] = df['labels'].apply(lambda x: tuple(x.items()))  # Convert label dict to tuple for stratification
 
-    # Step 5: Split indices into train, val, test
-    train_indices = current_data_index_list[:train_size]
-    val_indices = current_data_index_list[train_size:train_size + val_size]
-    test_indices = current_data_index_list[train_size + val_size:]
+    # Split the data into training and temporary (validation + test)
+    train_df, temp_df = train_test_split(df, test_size=(1 - train_scales), stratify=df['labels'])
 
-    # Function to find label file corresponding to video file
-    def find_label_file(video_name):
-        video_basename = os.path.splitext(video_name)[0]  # remove extension
-        for label_name in label_names:
-            if label_name.startswith(video_basename):
-                return label_name
-        return None
+    # Further split the temporary set into validation and test
+    val_df, test_df = train_test_split(temp_df, test_size=(test_scales / (val_scales + test_scales)), stratify=temp_df['labels'])
 
-    # Step 6: Write filenames to corresponding CSV files with labels
-    def write_to_csv(file_path, files):
+    # Step 4: Write filenames to corresponding CSV files with labels
+    def write_to_csv(file_path, df):
         with open(file_path, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(['video_path', 'label_path'])
-            for video_name in files:
-                label_file = find_label_file(video_name)
+            for _, row in df.iterrows():
+                video_path = os.path.join(data_path, row['video_name'])
+                label_file = find_label_file(row['video_name'], label_names)
                 if label_file is None:
-                    print(f"[{time.time}][Error] Label file not found for {video_name}. Operation aborted. ")
-                    return None
-                video_path = os.path.join(data_path, video_name)
+                    print(f"[{time.time()}][Error] Label file not found for {row['video_name']}.")
+                    continue
                 writer.writerow([video_path, os.path.join(label_path, label_file)])
         return file_path
 
-    train_files = [video_names[idx] for idx in train_indices]
-    val_files = [video_names[idx] for idx in val_indices]
-    test_files = [video_names[idx] for idx in test_indices]
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
 
-    train_csv_path = os.path.join(collection_path, "train.csv")
-    val_csv_path = os.path.join(collection_path, "val.csv")
-    test_csv_path = os.path.join(collection_path, "test.csv")
+    train_csv_path = os.path.join(output_path, "train.csv")
+    val_csv_path = os.path.join(output_path, "val.csv")
+    test_csv_path = os.path.join(output_path, "test.csv")
 
-    train_csv = write_to_csv(train_csv_path, train_files)
-    val_csv = write_to_csv(val_csv_path, val_files)
-    test_csv = write_to_csv(test_csv_path, test_files)
+    write_to_csv(train_csv_path, train_df)
+    write_to_csv(val_csv_path, val_df)
+    write_to_csv(test_csv_path, test_df)
 
-    return train_csv, val_csv, test_csv
+    return train_csv_path, val_csv_path, test_csv_path
+
+def find_label_file(video_name, label_names):
+    video_basename = os.path.splitext(video_name)[0]  # remove extension
+    for label_name in label_names:
+        if label_name.startswith(video_basename):
+            return label_name
+    return None

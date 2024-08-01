@@ -77,6 +77,43 @@ def topk_accuracies(preds, labels, ks):
     return [(x / preds.size(0)) * 100.0 for x in num_topks_correct]
 
 
+def topks_correct_binary(preds, labels, ks):
+    """
+    Given the predictions, labels, and a list of top-k values, compute the
+    number of correct predictions for each top-k value in binary classification.
+
+    Args:
+        preds (tensor): Array of predictions. Dimension is batch size N.
+            For binary classification, this is a tensor of size N where each value
+            is the probability or logit of the positive class.
+        labels (tensor): Array of labels. Dimension is batch size N.
+            Labels should be 0 or 1 for binary classification.
+        ks (list): List of top-k values. For binary classification, this is typically [1].
+
+    Returns:
+        topks_correct (list): List of numbers, where the `i`-th entry
+            corresponds to the number of top-`ks[i]` correct predictions.
+    """
+    # Ensure all tensors are on the same device
+    device = preds.device
+    labels = labels.to(device).long()  # Ensure labels are long
+
+    assert preds.size(0) == labels.size(0), "Batch dimension of predictions and labels must match"
+
+    assert preds.size(0) == labels.size(0), "Batch dimension of predictions and labels must match"
+
+    # Convert logits to probabilities if needed
+    if preds.dim() == 1:
+        preds = torch.sigmoid(preds)
+
+    # Binarize predictions using a threshold of 0.5
+    pred_labels = (preds > 0.5).long()
+
+    correct_predictions = (pred_labels == labels).sum().item()
+
+    return [correct_predictions]
+
+
 def topks_correct_multi_label(preds, labels, ks):
     """
     Computes the number of top-k correct predictions for multi-label classification.

@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 
 
 @DATASET_REGISTRY.register()
-class Interaction2023(torch.utils.data.Dataset):
+class Interaction(torch.utils.data.Dataset):
     """
     Interaction dataset loader. Construct the Interaction dataset loader, then sample
     clips from the videos.
@@ -49,7 +49,8 @@ class Interaction2023(torch.utils.data.Dataset):
         assert mode in [
             "train",
             "val",
-            "test"
+            "test",
+            "vis"
         ], f"Split '{mode}' not supported for InteractionDataset"
         self.mode = mode
         self.cfg = cfg
@@ -69,7 +70,7 @@ class Interaction2023(torch.utils.data.Dataset):
         self.aug = False
         self.rand_erase = False
 
-        if self.mode in ["train", "val"]:
+        if self.mode in ["train", "val", "vis"]:
             self._num_clips = 1
         elif self.mode in ["test"]:
             self._num_clips = cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS
@@ -87,7 +88,7 @@ class Interaction2023(torch.utils.data.Dataset):
         Construct the video loader.
         """
         path_to_file = os.path.join(
-            self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
+            self.cfg.DATA.PATH_TO_DATA_DIR, f"{self.mode}.csv"
         )  # train.csv / test.csv / val.csv
         assert pathmgr.exists(path_to_file), "{} dir not found".format(path_to_file)
 
@@ -185,6 +186,14 @@ class Interaction2023(torch.utils.data.Dataset):
                 else [self.cfg.DATA.TRAIN_JITTER_SCALES[0]] * 2
                      + [self.cfg.DATA.TEST_CROP_SIZE]
             )
+        elif self.mode in ["vis"]:
+            temporal_sample_index = (
+                    self._spatial_temporal_idx[index] // self.cfg.TEST.NUM_SPATIAL_CROPS
+            )
+            spatial_sample_index = 1
+            min_scale, max_scale, crop_size = (
+                [self.cfg.DATA.TRAIN_JITTER_SCALES[0]] * 2 + [self.cfg.DATA.TEST_CROP_SIZE]
+            )
             assert len({min_scale, max_scale}) == 1
         else:
             raise NotImplementedError("Does not support {} mode".format(self.mode))
@@ -223,7 +232,7 @@ class Interaction2023(torch.utils.data.Dataset):
                         self._path_to_videos[index], e
                     )
                 )
-                if self.mode not in ["test"]:
+                if self.mode not in ["test", "vis"]:
                     index = random.randint(0, len(self._path_to_videos) - 1)
                 continue
 
@@ -296,12 +305,13 @@ class Interaction2023(torch.utils.data.Dataset):
                     )
                 )
                 if (
-                    self.mode not in ["test"]
+                    self.mode not in ["test", "vis"]
                     and (i_try % (self._num_retries // 8)) == 0
                 ):
                     index = random.randint(0, len(self._path_to_videos) - 1)
                 continue
 
+            # Data enhancing
             num_aug = (
                 self.cfg.DATA.TRAIN_CROP_NUM_SPATIAL * self.cfg.AUG.NUM_SAMPLE
                 if self.mode in ["train"]
@@ -310,9 +320,8 @@ class Interaction2023(torch.utils.data.Dataset):
             num_out = num_aug * num_decode
             f_out, time_idx_out = [None] * num_out, [None] * num_out
             idx = -1
-            # TODO: Not quite sure if this is correct
+
             label = self._labels[index]
-            # labels = self._get_frame_labels(self._get_frame_timestamp(time_idx[0][0]), label)
 
             for i in range(num_decode):
                 for _ in range(num_aug):
@@ -412,6 +421,10 @@ class Interaction2023(torch.utils.data.Dataset):
                 if self.dummy_output is None:
                     self.dummy_output = (frames, label, index, time_idx, {})
 
+            filename = self._path_to_videos[index].split("/")[-1][:-4]  # extract the filename
+            if self.mode in ["vis"]:
+                return frames, label, index, time_idx, {}, filename
+
             return frames, label, index, time_idx, {}
         else:
             raise RuntimeError(
@@ -434,9 +447,9 @@ class Interaction2023(torch.utils.data.Dataset):
             label = {
                     'UserAwkwardness': row['UserAwkwardness'],
                     'RobotMistake': row['RobotMistake'],
-                    'RobotInterruption': row['RobotInterruption'],
-                    'RobotNonResponding': row['RobotNonResponding'],
-                    'RobotInappropriateResponse': row['RobotInappropriateResponse'],
+                    # 'RobotInterruption': row['RobotInterruption'],
+                    # 'RobotNonResponding': row['RobotNonResponding'],
+                    # 'RobotInappropriateResponse': row['RobotInappropriateResponse'],
                 }
 
         # Convert the binary string to a decimal integer
