@@ -24,7 +24,7 @@ cd slowfast
 ```
 2. Using the following command to start a training process. 
 ```
-python tools/run_net.py --cfg ../src/config/interaction_config.yaml
+python tools/run_net.py --cfg ../src/config/interaction_ua_2022_slowfast_config.yaml
 ```
 
 
