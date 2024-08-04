@@ -8,8 +8,7 @@ from .imagenet import Imagenet  # noqa
 from .kinetics import Kinetics  # noqa
 from .ssv2 import Ssv2  # noqa
 from .interaction import Interaction
-from .interaction_variant import Interaction_ua_2022, Interaction_ri_2022, Interaction_rnr_2022, Interaction_rir_2022
-from .interaction_unary import Interactionunary
+from .interaction_variant import Interaction_ir_2022, Interaction_ua_2022, Interaction_rm_2022, Interaction_ri_2022, Interaction_rnr_2022, Interaction_rir_2022
 
 try:
     from .ptv_datasets import Ptvcharades, Ptvkinetics, Ptvssv2  # noqa

@@ -2,8 +2,8 @@ TRAIN:
   ENABLE: True
   DATASET: Interaction
   BATCH_SIZE: 32
-  EVAL_PERIOD: 2
-  CHECKPOINT_PERIOD: 5
+  EVAL_PERIOD: 1
+  CHECKPOINT_PERIOD: 1
   AUTO_RESUME: True
 DATA:
   NUM_FRAMES: 4
@@ -53,11 +53,11 @@ MODEL:
   LOSS_FUNC: bce_logit
   DROPOUT_RATE: 0.5
 TEST:
-  ENABLE: True
+  ENABLE: False
   DATASET: Interaction
-  BATCH_SIZE: 16
+  BATCH_SIZE: 32
 DATA_LOADER:
-  NUM_WORKERS: 6
+  NUM_WORKERS: 8
   PIN_MEMORY: True
 NUM_GPUS: 1
 NUM_SHARDS: 1
@@ -75,5 +75,5 @@ TENSORBOARD:
     GRAD_CAM:
       ENABLE: True
       USE_TRUE_LABEL: False
-      # OUTPUT_DIR: "../outputs/w1/slowfast/grad_cam"
+      OUTPUT_DIR: "../outputs/interaction/2022/w1/slowfast/multi/grad_cam"
       LAYER_LIST: ['s5', 's4_fuse'] # The number of layer must be equal to the number of pathway(s).

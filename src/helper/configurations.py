@@ -9,13 +9,19 @@ proj_dir = os.path.join(proj_dir, '../')
 
 
 # input dir
-raw_data_dir = os.path.join(proj_dir, f'data/interaction/raw/{year}/{w_num}')
-raw_video_dir = os.path.join(raw_data_dir, 'videos')
-raw_label_dir = os.path.join(raw_data_dir, 'labels')
+def get_raw_data_dir(year, w_num):
+    raw_data_dir = os.path.join(proj_dir, f'data/interaction/raw/{year}/{w_num}')
+    raw_video_dir = os.path.join(raw_data_dir, 'videos')
+    raw_label_dir = os.path.join(raw_data_dir, 'labels')
 
-data_dir = os.path.join(proj_dir, f'data/interaction/clip/{year}/{w_num}')
-video_dir = os.path.join(data_dir, 'videos')
-label_dir = os.path.join(data_dir, 'labels')
+    return raw_data_dir, raw_video_dir, raw_label_dir
+
+def get_clip_data_dir(year, w_num):
+    data_dir = os.path.join(proj_dir, f'data/interaction/clip/{year}/{w_num}')
+    video_dir = os.path.join(data_dir, 'videos')
+    label_dir = os.path.join(data_dir, 'labels')
+
+    return data_dir, video_dir, label_dir
 
 
 # output dir
