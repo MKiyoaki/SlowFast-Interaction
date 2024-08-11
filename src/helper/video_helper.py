@@ -1,8 +1,18 @@
+import math
 import os
 import subprocess
 
+import cv2
+from PIL import Image
 
-def combine_videos(target_dir, output_dir):
+
+def combine_videos(target_dir, output_dir=None):
+    """
+    Combined the videos into a single video file.
+    """
+    if output_dir is None:
+        output_dir = target_dir
+
     videos = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.endswith(('.mp4', '.avi', '.mov', '.mkv'))]
     videos.sort()
 
@@ -14,6 +24,9 @@ def combine_videos(target_dir, output_dir):
     with open(list_file, 'w') as f:
         for video in videos:
             f.write(f"file '{video}'\n")
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     output_file = os.path.join(output_dir, 'combined_video.mp4')
 
@@ -29,9 +42,52 @@ def combine_videos(target_dir, output_dir):
     # 执行命令
     try:
         subprocess.run(command, check=True)
-        print(f"视频合并完成，输出文件为: {output_file}")
+        print(f"Successfully combine videos: {output_file}")
     except subprocess.CalledProcessError as e:
-        print(f"视频合并失败: {e}")
+        print(f"Failed to combine videos: {e}")
     finally:
         # 删除临时文件
         os.remove(list_file)
+
+
+def combine_frames(target_dir, output_dir=None):
+    if output_dir is None:
+        output_dir = target_dir
+
+    videos = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if
+              f.endswith(('.mp4', '.avi', '.mov', '.mkv'))]
+    videos.sort()
+
+    if not videos:
+        print("No video found")
+        return
+
+    frames = []
+    for video in videos:
+        cap = cv2.VideoCapture(video)
+        ret, frame = cap.read()
+        if ret:
+            frames.append(frame)
+        cap.release()
+
+    if not frames:
+        print("No frames extracted")
+        return
+
+    num_frames = len(frames)
+    grid_size = math.ceil(math.sqrt(num_frames))
+    frame_height, frame_width, _ = frames[0].shape
+    grid_image = Image.new('RGB', (grid_size * frame_width, grid_size * frame_height))
+
+    for idx, frame in enumerate(frames):
+        row = idx // grid_size
+        col = idx % grid_size
+        pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        grid_image.paste(pil_img, (col * frame_width, row * frame_height))
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    output_file = os.path.join(output_dir, 'frame_grid.jpg')
+    grid_image.save(output_file)
+    print(f"Successfully created frame grid: {output_file}")

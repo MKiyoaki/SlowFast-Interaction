@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 
 from helper.configurations import get_clip_data_dir, get_raw_data_dir
-from helper.interaction_data_process import dataset_partition, video_clip_by_duration
+from helper.data_pre_process import dataset_partition, video_clip_by_duration
 
 def split_videos(w_num):
     # Split dataset into train, validation, and test sets

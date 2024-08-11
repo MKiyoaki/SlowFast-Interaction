@@ -131,6 +131,37 @@ def dataset_partition(data_path, label_path, output_path, train_scales=0.8, val_
     return train_csv_path, val_csv_path, test_csv_path
 
 
+def dataset_get_vis(data_path, label_path, output_path):
+    # Step 1: Read video and label names
+    video_names = os.listdir(data_path)
+    label_names = os.listdir(label_path)
+
+    # Step 2: Create a mapping of video to labels
+    video_to_label = []
+    for video_name in video_names:
+        label_file = find_label_file(video_name, label_names)
+        if label_file:
+            video_path = os.path.join(data_path, video_name)
+            label_path_full = os.path.join(label_path, label_file)
+            video_to_label.append((video_path, label_path_full))
+        else:
+            print(f"[{time.time()}][Error] Label file not found for {video_name}.")
+
+    # Step 3: Write the complete list to a CSV file
+    output_csv_path = os.path.join(output_path, "vis.csv")
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    with open(output_csv_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['video_path', 'label_path'])
+        writer.writerows(video_to_label)
+
+    return output_csv_path
+
+
 def undersample(df, target_labels):
     # Separate positive and negative samples
     # Assuming target_labels is a list of labels we are interested in
@@ -165,7 +196,7 @@ def dataset_partition_undersampling(data_path, label_path, output_path, target_l
         if label_file:
             labels_df = pd.read_csv(os.path.join(label_path, label_file))
             # Extract only the label columns (ignore start_time and end_time)
-            label_columns = ['UserAwkwardness']
+            label_columns = target_labels
             video_to_label[video_name] = labels_df[label_columns].iloc[0].to_dict()
 
     # Create a DataFrame from video_to_label
@@ -212,9 +243,90 @@ def dataset_partition_undersampling(data_path, label_path, output_path, target_l
     return train_csv_path, val_csv_path, test_csv_path
 
 
+def oversample(df, target_labels):
+    # Separate positive and negative samples
+    pos_samples = df[df['labels'].apply(lambda x: any(val == 1 for label, val in x))]
+    neg_samples = df[~df['labels'].apply(lambda x: any(val == 1 for label, val in x))]
+
+    # Determine the number of samples to match the larger class
+    max_samples = max(len(pos_samples), len(neg_samples))
+
+    # Oversample the smaller class
+    pos_samples = pos_samples.sample(max_samples, replace=True, random_state=42)
+    neg_samples = neg_samples.sample(max_samples, replace=True, random_state=42)
+
+    # Combine the oversampled positive and negative samples
+    oversampled_df = pd.concat([pos_samples, neg_samples])
+
+    return oversampled_df
+
+
+def dataset_partition_oversampling(data_path, label_path, output_path, target_labels, train_scales=0.8, val_scales=0.1, test_scales=0.1):
+    # Step 1: Read video and label names
+    video_names = os.listdir(data_path)
+    label_names = os.listdir(label_path)
+
+    assert train_scales + val_scales + test_scales == 1
+
+    # Step 2: Create a mapping of video to labels
+    video_to_label = {}
+    for video_name in video_names:
+        label_file = find_label_file(video_name, label_names)
+        if label_file:
+            labels_df = pd.read_csv(os.path.join(label_path, label_file))
+            # Extract only the label columns (ignore start_time and end_time)
+            label_columns = target_labels
+            video_to_label[video_name] = labels_df[label_columns].iloc[0].to_dict()
+
+    # Create a DataFrame from video_to_label
+    df = pd.DataFrame(list(video_to_label.items()), columns=['video_name', 'labels'])
+
+    # Step 3: Convert labels to a categorical format for stratification
+    df['labels'] = df['labels'].apply(lambda x: tuple(x.items()))
+
+    # Perform oversampling to balance the dataset
+    df = oversample(df, target_labels)
+
+    # Split the data into training and temporary (validation + test)
+    train_df, temp_df = train_test_split(df, test_size=(1 - train_scales), stratify=df['labels'])
+
+    # Further split the temporary set into validation and test
+    val_df, test_df = train_test_split(temp_df, test_size=(test_scales / (val_scales + test_scales)), stratify=temp_df['labels'])
+
+    # Step 4: Write filenames to corresponding CSV files with labels
+    def write_to_csv(file_path, df):
+        with open(file_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['video_path', 'label_path'])
+            for _, row in df.iterrows():
+                video_path = os.path.join(data_path, row['video_name'])
+                label_file = find_label_file(row['video_name'], label_names)
+                if label_file is None:
+                    print(f"[{time.time()}][Error] Label file not found for {row['video_name']}.")
+                    continue
+                writer.writerow([video_path, os.path.join(label_path, label_file)])
+        return file_path
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    train_csv_path = os.path.join(output_path, "train.csv")
+    val_csv_path = os.path.join(output_path, "val.csv")
+    test_csv_path = os.path.join(output_path, "test.csv")
+
+    write_to_csv(train_csv_path, train_df)
+    write_to_csv(val_csv_path, val_df)
+    write_to_csv(test_csv_path, test_df)
+
+    return train_csv_path, val_csv_path, test_csv_path
+
+
 def find_label_file(video_name, label_names):
     video_basename = os.path.splitext(video_name)[0]  # remove extension
     for label_name in label_names:
         if label_name.startswith(video_basename):
             return label_name
     return None
+
+
