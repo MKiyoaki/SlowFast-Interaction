@@ -105,12 +105,11 @@ class Interaction_ir_2022(Interaction):
         label = {}
         for idx, row in data.iterrows():
             label = {
-                    'UserAwkwardness': row['UserAwkwardness'],
-                    'RobotMistake': row['RobotMistake'],
+                    'InteractionRupture': row['InteractionRupture'],
             }
 
         # Take the union of them
-        label_tensor = int(label['UserAwkwardness']) or int(label['RobotMistake'])
+        label_tensor = int(label['InteractionRupture'])
         return label_tensor
 
 
