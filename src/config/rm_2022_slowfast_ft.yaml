@@ -1,9 +1,9 @@
 TRAIN:
   ENABLE: True
-  DATASET: Interaction_ua_2022
+  DATASET: Interaction_rm_2022
   BATCH_SIZE: 48
-  EVAL_PERIOD: 1
-  CHECKPOINT_PERIOD: 1
+  EVAL_PERIOD: 5
+  CHECKPOINT_PERIOD: 10
   AUTO_RESUME: True
 DATA:
   NUM_FRAMES: 4
@@ -13,7 +13,7 @@ DATA:
   TEST_CROP_SIZE: 256
   INPUT_CHANNEL_NUM: [3, 3]
   # ENSEMBLE_METHOD: "avg"
-  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/clip/2022/csv/csv_w1to4"
+  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/clip/2022/w1"
 SLOWFAST:
   ALPHA: 4
   BETA_INV: 8
@@ -38,13 +38,13 @@ BN:
   USE_PRECISE_STATS: False
   NUM_BATCHES_PRECISE: 200
 SOLVER:
-  BASE_LR: 1e-4 # 6e-5
+  BASE_LR: 6e-4 # 6e-5
   LR_POLICY: cosine
-  MAX_EPOCH: 10
+  MAX_EPOCH: 100
   MOMENTUM: 0.9
   WEIGHT_DECAY: 3e-4
-  WARMUP_EPOCHS: 1.0 # 0.0
-  WARMUP_START_LR: 1e-5
+  WARMUP_EPOCHS: 0.0
+  WARMUP_START_LR: 1e-4
   OPTIMIZING_METHOD: adam
 MODEL:
   NUM_CLASSES: 2
@@ -54,20 +54,20 @@ MODEL:
   DROPOUT_RATE: 0.5
 TEST:
   ENABLE: True
-  DATASET: Interaction_ua_2022
-  BATCH_SIZE: 96
+  DATASET: Interaction_rm_2022
+  BATCH_SIZE: 128
 DATA_LOADER:
-  NUM_WORKERS: 12
+  NUM_WORKERS: 16
   PIN_MEMORY: True
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: "../outputs/interaction/2022/w1/slowfast/ua"
+OUTPUT_DIR: "../outputs/interaction/2022/w1/slowfast/rm/1_w1234_ft"
 TENSORBOARD:
   ENABLE: True
-  CLASS_NAMES_PATH: "../src/config/names/class_id_ua.json"
+  CLASS_NAMES_PATH: "../src/config/names/class_id_rm.json"
   MODEL_VIS:
-    ENABLE: False
+    ENABLE: True
     MODEL_WEIGHTS: False
     ACTIVATIONS: False
     INPUT_VIDEO: False
@@ -75,5 +75,5 @@ TENSORBOARD:
     GRAD_CAM:
       ENABLE: True
       USE_TRUE_LABEL: False
-      # OUTPUT_DIR: "../outputs/interaction/2022/w1/slowfast/ua/grad_cam"
+      OUTPUT_DIR: "../outputs/interaction/2022/w1/slowfast/rm/1_w1234_ft/grad_cam"
       LAYER_LIST: ['s5', 's4_fuse'] # The number of layer must be equal to the number of pathway(s).
