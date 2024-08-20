@@ -1,22 +1,26 @@
 import os
 import random
 import csv
+import shutil
+
 import pandas as pd
 import time
 
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from sklearn.model_selection import train_test_split
+from imblearn.over_sampling import SMOTE
 
 
 def video_clip_by_duration(raw_data_path, raw_label_path, clip_data_path):
-    # Create output directory if not exists
-    output_video_dir = os.path.join(clip_data_path, "videos/")
-    if not os.path.exists(output_video_dir):
-        os.makedirs(output_video_dir)
+    """
+    Split the video into clips according to the duration annotation in the label files.
 
-    output_label_dir = os.path.join(clip_data_path, "labels/")
-    if not os.path.exists(output_label_dir):
-        os.makedirs(output_label_dir)
+    """
+    # Create output directory if not exists
+    video_output_path = os.path.join(clip_data_path, 'videos')
+    label_output_path = os.path.join(clip_data_path, 'labels')
+    os.makedirs(video_output_path, exist_ok=True)
+    os.makedirs(label_output_path, exist_ok=True)
 
     label_files = os.listdir(raw_label_path)
     for label_file in label_files:
@@ -28,9 +32,9 @@ def video_clip_by_duration(raw_data_path, raw_label_path, clip_data_path):
         for idx, label in enumerate(labels):
             start_time = label['start_time']
             end_time = label['end_time']
-            output_video_path = os.path.join(output_video_dir,
+            output_video_path = os.path.join(video_output_path,
                                              f"{file_name}_{idx + 1}.avi")
-            output_label_path = os.path.join(output_label_dir,
+            output_label_path = os.path.join(label_output_path,
                                              f"{file_name}_{idx + 1}.csv")
 
             # Cut video segment
@@ -45,6 +49,46 @@ def video_clip_by_duration(raw_data_path, raw_label_path, clip_data_path):
             label_data.to_csv(output_label_path, index=False)
 
     return 0
+
+
+def video_clip_by_time_step(raw_data_path, raw_label_path, clip_data_path, time_threshold=1, time_step=1):
+    # Create output directory if not exists
+    video_output_path = os.path.join(clip_data_path, 'videos')
+    label_output_path = os.path.join(clip_data_path, 'labels')
+    os.makedirs(video_output_path, exist_ok=True)
+    os.makedirs(label_output_path, exist_ok=True)
+
+    for video_file in os.listdir(raw_data_path):
+        if video_file.endswith(('.avi', '.mp4', '.mov', '.mkv')):  # Check if the files are videos
+            video_path = os.path.join(raw_data_path, video_file)
+            label_file = os.path.splitext(video_file)[0] + '.csv'
+            label_path = os.path.join(raw_label_path, label_file)
+
+            # Open files
+            with VideoFileClip(video_path) as video:
+                video_duration = video.duration  # Get the video length
+
+                if video_duration > time_threshold:
+                    num_clips = int(video_duration // time_step)
+
+                    for i in range(num_clips):
+                        start_time = i * time_step
+                        end_time = start_time + time_step
+
+                        if end_time > video_duration:
+                            break
+
+                        clip = video.subclip(start_time, end_time)
+
+                        new_video_name = f"{os.path.splitext(video_file)[0]}_{i + 1}.avi"
+                        new_video_path = os.path.join(video_output_path, new_video_name)
+                        clip.write_videofile(new_video_path, codec="libx264", audio_codec="aac")
+
+                        # Copy the corresponding label files
+                        if os.path.exists(label_path):
+                            new_label_name = f"{os.path.splitext(video_file)[0]}_{i + 1}.csv"
+                            new_label_path = os.path.join(label_output_path, new_label_name)
+                            shutil.copyfile(label_path, new_label_path)
 
 
 def get_label(label_path):
@@ -131,7 +175,7 @@ def dataset_partition(data_path, label_path, output_path, train_scales=0.8, val_
     return train_csv_path, val_csv_path, test_csv_path
 
 
-def dataset_get_vis(data_path, label_path, output_path):
+def dataset_get_vis(output_path, data_path, label_path):
     # Step 1: Read video and label names
     video_names = os.listdir(data_path)
     label_names = os.listdir(label_path)
@@ -261,14 +305,25 @@ def oversample(df, target_labels):
     return oversampled_df
 
 
+def smote_oversample(df, target_column):
+    X = df.drop(columns=[target_column])
+    y = df[target_column]
+
+    smote = SMOTE(random_state=42)
+
+    X_res, y_res = smote.fit_resample(X, y)
+
+    resampled_df = pd.concat([pd.DataFrame(X_res, columns=X.columns), pd.DataFrame(y_res, columns=[target_column])], axis=1)
+
+    return resampled_df
+
+
 def dataset_partition_oversampling(data_path, label_path, output_path, target_labels, train_scales=0.8, val_scales=0.1, test_scales=0.1):
-    # Step 1: Read video and label names
     video_names = os.listdir(data_path)
     label_names = os.listdir(label_path)
 
     assert train_scales + val_scales + test_scales == 1
 
-    # Step 2: Create a mapping of video to labels
     video_to_label = {}
     for video_name in video_names:
         label_file = find_label_file(video_name, label_names)
@@ -284,16 +339,14 @@ def dataset_partition_oversampling(data_path, label_path, output_path, target_la
     # Step 3: Convert labels to a categorical format for stratification
     df['labels'] = df['labels'].apply(lambda x: tuple(x.items()))
 
-    # Perform oversampling to balance the dataset
-    df = oversample(df, target_labels)
-
     # Split the data into training and temporary (validation + test)
     train_df, temp_df = train_test_split(df, test_size=(1 - train_scales), stratify=df['labels'])
-
-    # Further split the temporary set into validation and test
     val_df, test_df = train_test_split(temp_df, test_size=(test_scales / (val_scales + test_scales)), stratify=temp_df['labels'])
 
-    # Step 4: Write filenames to corresponding CSV files with labels
+    # Perform oversampling to balance the dataset
+    # train_df = oversample(train_df, target_labels)
+    train_df = smote_oversample(train_df, target_labels)
+
     def write_to_csv(file_path, df):
         with open(file_path, 'w', newline='') as f:
             writer = csv.writer(f)
@@ -328,5 +381,3 @@ def find_label_file(video_name, label_names):
         if label_name.startswith(video_basename):
             return label_name
     return None
-
-

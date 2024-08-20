@@ -280,6 +280,9 @@ _C.TEST.NUM_ENSEMBLE_VIEWS = 10
 # prediction results.
 _C.TEST.NUM_SPATIAL_CROPS = 3
 
+# Global threshold to predicate the classes
+_C.TEST.GLOBAL_THRESHOLD = 0.5
+
 # Checkpoint types include `caffe2` or `pytorch`.
 _C.TEST.CHECKPOINT_TYPE = "pytorch"
 # Path to saving prediction results file.
@@ -1256,6 +1259,10 @@ _C.DEMO.COMMON_CLASS_NAMES = [
 # Slow-motion rate for the visualization. The visualized portions of the
 # video will be played `_C.DEMO.SLOWMO` times slower than usual speed.
 _C.DEMO.SLOWMO = 1
+
+_C.EARLY_STOPPING = CfgNode()
+_C.EARLY_STOPPING.ENABLED = True
+_C.EARLY_STOPPING.PATIENCE = 6
 
 # Add custom config with default values.
 custom_config.add_custom_config(_C)

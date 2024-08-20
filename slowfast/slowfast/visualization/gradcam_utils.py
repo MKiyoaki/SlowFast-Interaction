@@ -142,11 +142,12 @@ class GradCAM:
         Returns:
             result_ls (list of tensor(s)): the visualized inputs.
             preds (tensor): shape (n_instances, n_class). Model predictions for `inputs`.
+            activations (list of tensor(s)): the activation values corresponding to the inputs.
         """
         result_ls = []
-        localization_maps, preds = self._calculate_localization_map(
-            inputs, labels=labels
-        )
+        localization_maps, preds = self._calculate_localization_map(inputs, labels=labels)
+
+        activations = []
         for i, localization_map in enumerate(localization_maps):
             # Convert (B, 1, T, H, W) to (B, T, H, W)
             localization_map = localization_map.squeeze(dim=1)
@@ -167,4 +168,12 @@ class GradCAM:
             curr_inp = curr_inp.permute(0, 1, 4, 2, 3)
             result_ls.append(curr_inp)
 
-        return result_ls, preds
+            # Extract activation value and abstract it to a float
+            activation = self.activations[self.target_layers[i]] # localization_map
+            # Global Maximum Pooling to abstract the activation value to a single float
+            activation_value = activation.max().item()
+            activations.append(activation_value)
+
+        activation_avg = sum(activations) / len(activations)
+
+        return result_ls, preds, activation_avg
