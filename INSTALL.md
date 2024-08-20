@@ -40,3 +40,8 @@
    ```
    python setup.py build develop
    ```
+   
+4. Install requirements for SlowFast-Interaction
+   ```
+   pip install imbalanced-learn
+   ```
