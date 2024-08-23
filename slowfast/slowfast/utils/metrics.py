@@ -4,7 +4,7 @@
 """Functions for computing metrics."""
 import numpy as np
 import torch
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
 
 
 def topks_correct(preds, labels, ks):
@@ -77,6 +77,7 @@ def topk_accuracies(preds, labels, ks):
     return [(x / preds.size(0)) * 100.0 for x in num_topks_correct]
 
 
+
 def topks_correct_binary(preds, labels, ks):
     """
     Given the predictions, labels, and a list of top-k values, compute the
@@ -88,7 +89,6 @@ def topks_correct_binary(preds, labels, ks):
             is the probability or logit of the positive class.
         labels (tensor): Array of labels. Dimension is batch size N.
             Labels should be 0 or 1 for binary classification.
-        ks (list): List of top-k values. For binary classification, this is typically [1].
 
     Returns:
         topks_correct (list): List of numbers, where the `i`-th entry
@@ -96,22 +96,20 @@ def topks_correct_binary(preds, labels, ks):
     """
     # Ensure all tensors are on the same device
     device = preds.device
-    labels = labels.to(device).long()  # Ensure labels are long
+    labels = labels.to(device)
 
-    assert preds.size(0) == labels.size(0), "Batch dimension of predictions and labels must match"
+    assert preds.size(0) == labels.size(0)
 
-    assert preds.size(0) == labels.size(0), "Batch dimension of predictions and labels must match"
+    max_k = max(ks)
+    _, top_max_k_inds = torch.topk(preds, max_k, dim=1, largest=True, sorted=True)
 
-    # Convert logits to probabilities if needed
-    if preds.dim() == 1:
-        preds = torch.sigmoid(preds)
+    topks_correct = []
+    for k in ks:
+        correct_predictions = (top_max_k_inds[:, :k] == labels.view(-1, 1)).any(dim=1)
+        topk_correct_count = correct_predictions.sum().item()
+        topks_correct.append(topk_correct_count)
 
-    # Binarize predictions using a threshold of 0.5
-    pred_labels = (preds > 0.5).long()
-
-    correct_predictions = (pred_labels == labels).sum().item()
-
-    return [correct_predictions]
+    return topks_correct
 
 
 def topks_correct_multi_label(preds, labels, ks):
@@ -220,6 +218,30 @@ def accuracies_multi_label(preds, labels):
     return weighted_accuracy.item() * 100.0
 
 
+def macro_accuracy(preds, labels, threshold=0.5):
+    """
+    Compute the macro accuracy for binary classification.
+
+    Args:
+        preds (tensor): Array of predictions. Dimension is batch size N.
+            For binary classification, this is a tensor of size N where each value
+            is the probability or logit of the positive class.
+        labels (tensor): Array of labels. Dimension is batch size N.
+            Labels should be 0 or 1 for binary classification.
+        threshold (float): Threshold for converting probabilities to binary predictions.
+
+    Returns:
+        macro_acc (float): The macro average accuracy across both classes.
+    """
+    # Convert probabilities/logits to binary predictions
+    binary_preds = (preds >= threshold).astype(int)
+
+    # Calculate accuracy
+    macro_acc = accuracy_score(labels, binary_preds)
+
+    return macro_acc
+
+
 def f1_scores(preds, labels, average='macro'):
     """
     Computes the F1 score for single label classification.
@@ -243,7 +265,6 @@ def f1_scores(preds, labels, average='macro'):
     f1 = f1_score(labels, preds, average=average, zero_division=zero_division)
 
     return f1
-
 
 
 def f1_scores_multi_label(preds, labels, average='macro', threshold=0.5):

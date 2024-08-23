@@ -15,7 +15,7 @@ import slowfast.utils.metrics as metrics
 import slowfast.utils.misc as misc
 import torch
 from fvcore.common.timer import Timer
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, confusion_matrix
 from slowfast.utils.ava_eval_helper import (
     evaluate_ava,
     read_csv,
@@ -251,6 +251,7 @@ class TestMeter:
         num_clips,
         num_cls,
         overall_iters,
+        threshold,
         multi_label=False,
         ensemble_method="sum",
     ):
@@ -264,6 +265,7 @@ class TestMeter:
                 aggregating the final prediction for the video.
             num_cls (int): number of classes for each prediction.
             overall_iters (int): overall iterations for testing.
+            threshold (float): threshold for predication.
             multi_label (bool): if True, use map as the metric.
             ensemble_method (str): method to perform the ensemble, options
                 include "sum", and "max".
@@ -280,6 +282,7 @@ class TestMeter:
         self.video_preds = torch.zeros((num_videos, num_cls))
         self.video_preds_list = []
         self.labels_list = []
+        self.threshold = threshold
         if multi_label:
             self.video_preds -= 1e10
 
@@ -322,18 +325,20 @@ class TestMeter:
         """
         for ind in range(preds.shape[0]):   # batch_size
             vid_id = int(clip_ids[ind]) // self.num_clips
-            if self.video_labels[vid_id].sum() > 0:
-                assert torch.equal(
-                    self.video_labels[vid_id].type(torch.FloatTensor),
-                    labels[ind].type(torch.FloatTensor),
-                )
+            # if self.video_labels[vid_id].sum() > 0:
+            #     assert torch.equal(
+            #         self.video_labels[vid_id].type(torch.FloatTensor),
+            #         labels[ind].type(torch.FloatTensor),
+            #     )
             self.video_labels[vid_id] = labels[ind]
             if not self.multi_label:
                 if self.ensemble_method == "sum":
-                    self.video_preds[vid_id] += preds[ind]
+                    # self.video_preds[vid_id] += preds[ind].item()
+                    self.video_preds_list.append(preds[ind])
+                    self.labels_list.append(labels[ind])
                 elif self.ensemble_method == "max":
                     self.video_preds[vid_id] = torch.max(
-                        self.video_preds[vid_id], preds[ind]
+                        self.video_preds[vid_id], preds[ind].item()
                     )
                 else:
                     raise NotImplementedError(
@@ -360,10 +365,6 @@ class TestMeter:
             "eta": eta,
             "time_diff": self.iter_timer.seconds(),
         }
-        #
-        # if self.stats.get("f1_score") is not None:
-        #     stats["f1_score"] = self.stats["f1_score"]
-        #     stats["avg_accuracy"] = self.stats["avg_accuracy"]
         logging.log_json_stats(stats)
 
     def iter_tic(self):
@@ -384,7 +385,7 @@ class TestMeter:
         self.data_timer.pause()
         self.net_timer.reset()
 
-    def finalize_metrics(self, ks=(1, 5)):
+    def finalize_metrics(self, ks):
         """
         Calculate and log the final ensembled metrics.
         ks (tuple): list of top-k values for topk_accuracies. For example,
@@ -418,14 +419,35 @@ class TestMeter:
             self.stats["avg_acc"] = avg_acc
         else:
             # Compute the errors.
-            if self.video_preds.shape[1] >= 5:
-                num_topks_correct = metrics.topks_correct(self.video_preds, self.video_labels, [1, 5])
-            elif self.video_preds.shape[1] > 1:
-                num_topks_correct = metrics.topks_correct(self.video_preds, self.video_labels, [1])
-            else:
-                num_topks_correct = metrics.topks_correct_binary(self.video_preds, self.video_labels, [1])
+            self.video_preds_list = torch.stack(self.video_preds_list)
+            self.labels_list = torch.stack(self.labels_list)
 
-            topks = [(x / self.video_preds.size(0)) * 100.0 for x in num_topks_correct]
+            self.video_preds_list = torch.where(self.video_preds_list >= self.threshold,
+                                                torch.tensor(1, dtype=self.video_preds_list.dtype),
+                                                torch.tensor(0, dtype=self.video_preds_list.dtype))
+
+            if self.video_preds.shape[1] >= 5:
+                num_topks_correct = metrics.topks_correct(self.video_preds_list, self.labels_list, [1, 5])
+            elif self.video_preds.shape[1] == 2:
+                num_topks_correct = metrics.topks_correct_binary(self.video_preds_list, self.labels_list, [1])
+            else:
+                num_topks_correct = metrics.topks_correct(self.video_preds_list, self.labels_list, [1])
+
+            topks = [(x / self.video_preds_list.size(0)) * 100.0 for x in num_topks_correct]
+
+            if self.video_preds_list.dim() == 2:
+                predicted_classes = torch.argmax(self.video_preds_list, dim=1)
+
+                predicted_classes_np = predicted_classes.cpu().numpy()
+                labels_np = self.labels_list.cpu().numpy()
+
+                cm = confusion_matrix(labels_np, predicted_classes_np)
+                logger.info("Confusion Matrix: ")
+                print(cm)
+
+                macro_acc = metrics.macro_accuracy(predicted_classes_np, labels_np, threshold=self.threshold)
+                logger.info("Macro accuracies: {}".format(round(macro_acc, 4)))
+
             assert len({len(ks), len(topks)}) == 1
             for k, topk in zip(ks, topks):
                 # self.stats["top{}_acc".format(k)] = topk.cpu().numpy()

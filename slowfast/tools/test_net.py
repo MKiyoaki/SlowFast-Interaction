@@ -7,6 +7,7 @@ import os
 import pickle
 
 import numpy as np
+import sklearn
 
 import slowfast.utils.checkpoint as cu
 import slowfast.utils.distributed as du
@@ -132,7 +133,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         loss = loss_fun(preds, labels)
         if writer is not None:
             writer.add_scalars(
-                {"Train/loss": loss},
+                {"Test/loss": loss},
                 global_step=cur_iter,
             )
 
@@ -160,7 +161,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
 
             logger.info("Successfully saved prediction results to {}".format(save_path))
 
-    test_meter.finalize_metrics()
+    test_meter.finalize_metrics(ks=[1] if cfg.MODEL.NUM_CLASSES < 5 else [1, 5])
     return test_meter
 
 
@@ -238,6 +239,7 @@ def test(cfg):
                     else cfg.CONTRASTIVE.NUM_CLASSES_DOWNSTREAM
                 ),
                 len(test_loader),
+                cfg.TEST.GLOBAL_THRESHOLD,
                 cfg.DATA.MULTI_LABEL,
                 cfg.DATA.ENSEMBLE_METHOD,
             )
@@ -265,19 +267,33 @@ def test(cfg):
         if not cfg.DATA.MULTI_LABEL:
             result_string_views += "_{}a{}" "".format(view, test_meter.stats["top1_acc"])
 
-            result_string = (
-                "_p{:.2f}_f{:.2f}_{} Top1 Acc: {} F1: {:.2f} Top5 Acc: {} MEM: {:.2f} f: {:.4f}"
-                "".format(
-                    params / 1e6,
-                    flops,
-                    view,
-                    test_meter.stats["top1_acc"],
-                    test_meter.stats["f1"],
-                    test_meter.stats["top5_acc"],
-                    misc.gpu_mem_usage(),
-                    flops,
+            if "top5_acc" in test_meter.stats.keys():
+                result_string = (
+                    "_p{:.2f}_f{:.2f}_{} Top1 Acc: {} F1: {:.2f} Top5 Acc: {} MEM: {:.2f} f: {:.4f}"
+                    "".format(
+                        params / 1e6,
+                        flops,
+                        view,
+                        test_meter.stats["f1"],
+                        test_meter.stats["top1_acc"],
+                        test_meter.stats["top5_acc"],
+                        misc.gpu_mem_usage(),
+                        flops,
+                    )
                 )
-            )
+            else:
+                result_string = (
+                    "_p{:.2f}_f{:.2f}_{} Top1 Acc: {} F1: {:.2f} MEM: {:.2f} f: {:.4f}"
+                    "".format(
+                        params / 1e6,
+                        flops,
+                        view,
+                        test_meter.stats["top1_acc"],
+                        test_meter.stats["f1"],
+                        misc.gpu_mem_usage(),
+                        flops,
+                    )
+                )
         else:
             result_string_views += "_{}a{:.2f}" "".format(view, test_meter.stats["f1"])
 
