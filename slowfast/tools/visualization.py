@@ -62,7 +62,7 @@ def run_visualization(vis_loader, model, cfg, writer=None):
         cfg.TENSORBOARD.CLASS_NAMES_PATH,
         cfg.TENSORBOARD.MODEL_VIS.TOPK_PREDS,
         cfg.TENSORBOARD.MODEL_VIS.COLORMAP,
-        thres=0.8,
+        thres=0.5,
     )
     if n_devices > 1:
         grad_cam_layer_ls = [
@@ -81,6 +81,7 @@ def run_visualization(vis_loader, model, cfg, writer=None):
         )
     logger.info("Finish drawing weights.")
     global_idx = -1
+    activation_avgs = []
     for inputs, labels, _, _, meta, filename in tqdm.tqdm(vis_loader):
         if cfg.NUM_GPUS:
             # Transfer the data to the current GPU device.
@@ -103,9 +104,11 @@ def run_visualization(vis_loader, model, cfg, writer=None):
             activations, preds = model_vis.get_activations(inputs)
         if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.ENABLE:
             if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
-                inputs, preds = gradcam(inputs, labels=labels)
+                inputs, preds, activation_avg = gradcam(inputs, labels=labels)
             else:
-                inputs, preds = gradcam(inputs)
+                inputs, preds, activation_avg = gradcam(inputs)
+            if torch.argmax(preds, dim=1) == labels:
+                activation_avgs.append(activation_avg)
         if cfg.NUM_GPUS:
             inputs = du.all_gather_unaligned(inputs)
             activations = du.all_gather_unaligned(activations)
@@ -185,21 +188,25 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                 )
                                 if len(class_names) > 1:
                                     for cls_idx in range(len(class_names)):
-                                        if cur_prediction[cls_idx] > 0.0:
+                                        if cur_prediction[cls_idx] > cfg.TEST.GLOBAL_THRESHOLD:
+                                            is_true = cls_idx == labels[cur_batch_idx]
                                             writer.add_video(
                                                 video,
-                                                tag="Cls {}/File {}/Input {}, Pathway {}".format(
-                                                    class_names[cls_idx], filename[0], global_idx, path_idx + 1
+                                                tag="Cls {} - {}/File {}/Input {}, Pathway {}".format(
+                                                    class_names[cls_idx], is_true, filename[0], global_idx, path_idx + 1
                                                 ),
                                             )
                                 else:
-                                    if cur_prediction > 0.0:
+                                    if cur_prediction > cfg.TEST.GLOBAL_THRESHOLD:
+                                        is_true = 0 == labels[cur_batch_idx]
+
                                         writer.add_video(
                                             video,
-                                            tag="Cls {}/File {}/Input {}, Pathway {}".format(
-                                                class_names[0], filename[0], global_idx, path_idx + 1
+                                            tag="Cls {} - {}/File {}/Input {}, Pathway {}".format(
+                                                class_names[0], is_true, filename[0], global_idx, path_idx + 1
                                             ),
                                         )
+
                                 if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR:
                                     dir = os.path.join(cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR, "Path_" + str(path_idx))
 
@@ -207,7 +214,7 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                     if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
                                         class_labels = labels
                                     else:
-                                        class_labels = np.array(cur_preds[cur_batch_idx] > 0.5, dtype=int)  # Convert to binary labels
+                                        class_labels = np.array(cur_preds[cur_batch_idx] > cfg.TEST.GLOBAL_THRESHOLD, dtype=int)  # Convert to binary labels
                                     for idx, label in enumerate(class_labels):
                                         if label == 1.0:
                                             class_name = class_names[idx]
@@ -219,11 +226,9 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                             video_filename = f"{filename[0]}_path.mp4"
                                             video_path = os.path.join(class_dir, video_filename)
 
-                                            # TODO test on this
                                             video = video.squeeze(0).permute(0, 2, 3, 1)
                                             video = (video * 255).to(torch.uint8)
                                             torchvision.io.write_video(video_path, video, fps=30)
-
 
                     if cfg.TENSORBOARD.MODEL_VIS.ACTIVATIONS:
                         writer.plot_weights_and_activations(
@@ -232,6 +237,12 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                             batch_idx=cur_batch_idx,
                             indexing_dict=indexing_dict,
                         )
+
+    activation_avgs = np.array(activation_avgs)
+    # activation_avgs = [tensor.cpu().numpy() for tensor in activation_avgs]
+
+    logger.info(f"Mean activation value: {round(np.mean(activation_avgs), 4)}")
+    logger.info(f"Variance of activation value: {round(np.var(activation_avgs), 4)}")
 
 
 def perform_wrong_prediction_vis(vis_loader, model, cfg):
