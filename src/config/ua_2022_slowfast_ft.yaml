@@ -1,8 +1,8 @@
 TRAIN:
-  ENABLE: False
+  ENABLE: True
   DATASET: Interaction_ua_2022
   BATCH_SIZE: 32
-  EVAL_PERIOD: 5
+  EVAL_PERIOD: 1
   CHECKPOINT_PERIOD: 5
   AUTO_RESUME: True
 DATA:
@@ -13,7 +13,7 @@ DATA:
   TEST_CROP_SIZE: 256
   INPUT_CHANNEL_NUM: [3, 3]
   # ENSEMBLE_METHOD: "avg"
-  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/clip/2022/w4"
+  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/frame/2022/w1"
 SLOWFAST:
   ALPHA: 4
   BETA_INV: 8
@@ -35,17 +35,22 @@ NONLOCAL:
   GROUP: [[1, 1], [1, 1], [1, 1], [1, 1]]
   INSTANTIATION: dot_product
 BN:
-  USE_PRECISE_STATS: False
+  USE_PRECISE_STATS: True
   NUM_BATCHES_PRECISE: 200
 SOLVER:
-  BASE_LR: 1e-3 # 6e-5
-  LR_POLICY: cosine
-  MAX_EPOCH: 100
+  BASE_LR: 1.87e-6 #1e-4
+  # -- when LR policy is steps --
+  LR_POLICY: steps_with_relative_lrs
+  STEPS: [ 38, 43, 48 ]
+  LRS: [ 0.5, 0.25, 0.125 ]
+#  LR_POLICY: cosine
+  MAX_EPOCH: 50
   MOMENTUM: 0.9
-  WEIGHT_DECAY: 2e-4
+  WEIGHT_DECAY: 5e-4
   WARMUP_EPOCHS: 0.0
   WARMUP_START_LR: 1e-4
   OPTIMIZING_METHOD: adam
+  BETAS: (0.9, 0.99)
 MODEL:
   NUM_CLASSES: 2
   ARCH: slowfast
@@ -55,17 +60,18 @@ MODEL:
 TEST:
   ENABLE: True
   DATASET: Interaction_ua_2022
-  BATCH_SIZE: 96
+  GLOBAL_THRESHOLD: 0.5 # 0.51
+  BATCH_SIZE: 128
 DATA_LOADER:
   NUM_WORKERS: 16
   PIN_MEMORY: True
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: "../outputs/interaction/2022/w4/slowfast/ua/4_w1234_ft"
+OUTPUT_DIR: "./outputs/interaction/2022/slowfast/ua/4_w1_step"
 TENSORBOARD:
   ENABLE: True
-  CLASS_NAMES_PATH: "../src/config/names/class_id_ua.json"
+  CLASS_NAMES_PATH: "./src/config/names/class_id_ua.json"
   MODEL_VIS:
     ENABLE: True
     MODEL_WEIGHTS: False
@@ -75,5 +81,5 @@ TENSORBOARD:
     GRAD_CAM:
       ENABLE: True
       USE_TRUE_LABEL: False
-      OUTPUT_DIR: "../outputs/interaction/2022/w4/slowfast/ua/3_w1234_sampling_ft/grad_cam"
+      OUTPUT_DIR: "./outputs/interaction/2022/slowfast/ua/4_w1_step/grad_cam"
       LAYER_LIST: ['s5', 's4_fuse'] # The number of layer must be equal to the number of pathway(s).
