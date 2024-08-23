@@ -6,9 +6,11 @@ import shutil
 import pandas as pd
 import time
 
+from imblearn.combine import SMOTETomek, SMOTEENN
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 
 
 def video_clip_by_duration(raw_data_path, raw_label_path, clip_data_path):
@@ -117,64 +119,6 @@ def get_label(label_path):
     return labels
 
 
-def dataset_partition(data_path, label_path, output_path, train_scales=0.8, val_scales=0.1, test_scales=0.1):
-    # Step 1: Read video and label names
-    video_names = os.listdir(data_path)
-    label_names = os.listdir(label_path)
-
-    assert train_scales + val_scales + test_scales == 1
-
-    # Step 2: Create a mapping of video to labels
-    video_to_label = {}
-    for video_name in video_names:
-        label_file = find_label_file(video_name, label_names)
-        if label_file:
-            labels_df = pd.read_csv(os.path.join(label_path, label_file))
-            # Extract only the label columns (ignore start_time and end_time)
-            label_columns = ['UserAwkwardness']
-            video_to_label[video_name] = labels_df[label_columns].iloc[0].to_dict()  # Adjust if necessary
-
-    # Create a DataFrame from video_to_label
-    df = pd.DataFrame(list(video_to_label.items()), columns=['video_name', 'labels'])
-
-    # Step 3: Convert labels to a categorical format for stratification
-    df['labels'] = df['labels'].apply(lambda x: tuple(x.items()))  # Convert label dict to tuple for stratification
-
-    # Split the data into training and temporary (validation + test)
-    train_df, temp_df = train_test_split(df, test_size=(1 - train_scales), stratify=df['labels'])
-
-    # Further split the temporary set into validation and test
-    val_df, test_df = train_test_split(temp_df, test_size=(test_scales / (val_scales + test_scales)), stratify=temp_df['labels'])
-
-    # Step 4: Write filenames to corresponding CSV files with labels
-    def write_to_csv(file_path, df):
-        with open(file_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['video_path', 'label_path'])
-            for _, row in df.iterrows():
-                video_path = os.path.join(data_path, row['video_name'])
-                label_file = find_label_file(row['video_name'], label_names)
-                if label_file is None:
-                    print(f"[{time.time()}][Error] Label file not found for {row['video_name']}.")
-                    continue
-                writer.writerow([video_path, os.path.join(label_path, label_file)])
-        return file_path
-
-    # Create output directory if it doesn't exist
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-
-    train_csv_path = os.path.join(output_path, "train.csv")
-    val_csv_path = os.path.join(output_path, "val.csv")
-    test_csv_path = os.path.join(output_path, "test.csv")
-
-    write_to_csv(train_csv_path, train_df)
-    write_to_csv(val_csv_path, val_df)
-    write_to_csv(test_csv_path, test_df)
-
-    return train_csv_path, val_csv_path, test_csv_path
-
-
 def dataset_get_vis(output_path, data_path, label_path):
     # Step 1: Read video and label names
     video_names = os.listdir(data_path)
@@ -206,7 +150,7 @@ def dataset_get_vis(output_path, data_path, label_path):
     return output_csv_path
 
 
-def undersample(df, target_labels):
+def undersample(df):
     # Separate positive and negative samples
     # Assuming target_labels is a list of labels we are interested in
     # We assume the labels column contains a tuple of (label_name, label_value)
@@ -226,68 +170,7 @@ def undersample(df, target_labels):
     return undersampled_df
 
 
-def dataset_partition_undersampling(data_path, label_path, output_path, target_labels, train_scales=0.8, val_scales=0.1, test_scales=0.1):
-    # Step 1: Read video and label names
-    video_names = os.listdir(data_path)
-    label_names = os.listdir(label_path)
-
-    assert train_scales + val_scales + test_scales == 1
-
-    # Step 2: Create a mapping of video to labels
-    video_to_label = {}
-    for video_name in video_names:
-        label_file = find_label_file(video_name, label_names)
-        if label_file:
-            labels_df = pd.read_csv(os.path.join(label_path, label_file))
-            # Extract only the label columns (ignore start_time and end_time)
-            label_columns = target_labels
-            video_to_label[video_name] = labels_df[label_columns].iloc[0].to_dict()
-
-    # Create a DataFrame from video_to_label
-    df = pd.DataFrame(list(video_to_label.items()), columns=['video_name', 'labels'])
-
-    # Step 3: Convert labels to a categorical format for stratification
-    df['labels'] = df['labels'].apply(lambda x: tuple(x.items()))
-
-    # Perform undersampling to balance the dataset
-    df = undersample(df, target_labels)
-
-    # Split the data into training and temporary (validation + test)
-    train_df, temp_df = train_test_split(df, test_size=(1 - train_scales), stratify=df['labels'])
-
-    # Further split the temporary set into validation and test
-    val_df, test_df = train_test_split(temp_df, test_size=(test_scales / (val_scales + test_scales)), stratify=temp_df['labels'])
-
-    # Step 4: Write filenames to corresponding CSV files with labels
-    def write_to_csv(file_path, df):
-        with open(file_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['video_path', 'label_path'])
-            for _, row in df.iterrows():
-                video_path = os.path.join(data_path, row['video_name'])
-                label_file = find_label_file(row['video_name'], label_names)
-                if label_file is None:
-                    print(f"[{time.time()}][Error] Label file not found for {row['video_name']}.")
-                    continue
-                writer.writerow([video_path, os.path.join(label_path, label_file)])
-        return file_path
-
-    # Create output directory if it doesn't exist
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-
-    train_csv_path = os.path.join(output_path, "train.csv")
-    val_csv_path = os.path.join(output_path, "val.csv")
-    test_csv_path = os.path.join(output_path, "test.csv")
-
-    write_to_csv(train_csv_path, train_df)
-    write_to_csv(val_csv_path, val_df)
-    write_to_csv(test_csv_path, test_df)
-
-    return train_csv_path, val_csv_path, test_csv_path
-
-
-def oversample(df, target_labels):
+def oversample(df):
     # Separate positive and negative samples
     pos_samples = df[df['labels'].apply(lambda x: any(val == 1 for label, val in x))]
     neg_samples = df[~df['labels'].apply(lambda x: any(val == 1 for label, val in x))]
@@ -305,20 +188,57 @@ def oversample(df, target_labels):
     return oversampled_df
 
 
-def smote_oversample(df, target_column):
-    X = df.drop(columns=[target_column])
-    y = df[target_column]
 
-    smote = SMOTE(random_state=42)
+def smote_tomek_sampling(df):
+    # Flatten the label dictionaries for compatibility with SMOTE/ENN
+    df_flat = pd.DataFrame(df['labels'].tolist(), index=df.index)
 
-    X_res, y_res = smote.fit_resample(X, y)
+    # Convert label columns to a binary (one-hot) format
+    mlb = MultiLabelBinarizer()
+    df_flat_encoded = pd.DataFrame(mlb.fit_transform(df_flat.apply(lambda x: tuple(x.items()), axis=1)),
+                                   columns=mlb.classes_,
+                                   index=df.index)
 
-    resampled_df = pd.concat([pd.DataFrame(X_res, columns=X.columns), pd.DataFrame(y_res, columns=[target_column])], axis=1)
+    sampler = SMOTETomek(random_state=42)
+
+    # Perform the SMOTE-Tomek sampling
+    X_resampled, y_resampled = sampler.fit_resample(df_flat_encoded, df.index)
+
+    # Mapping back to original indices
+    resampled_df = df.iloc[df.index.get_indexer(y_resampled)].copy()
+
+    # Update the 'labels' column to match resampled data
+    resampled_df['labels'] = X_resampled.apply(lambda x: dict(zip(mlb.classes_, x)), axis=1)
 
     return resampled_df
 
+def dataset_partition(
+            data_path,
+            label_path,
+            output_path,
+            target_labels,
+            sampling="mixed",
+            train_scales=0.8,
+            val_scales=0.1,
+            test_scales=0.1
+    ):
+    """
+    Dataset partition methods.
 
-def dataset_partition_oversampling(data_path, label_path, output_path, target_labels, train_scales=0.8, val_scales=0.1, test_scales=0.1):
+    Args:
+        data_path (str): the path to the data folder.
+        label_path (str): the path to the label file.
+        output_path (str): the path to the output folder.
+        target_labels (list): the target labels.
+        sampling (str): the sampling strategy. Can only be chosen from "mixed", "oversample" or "undersample".
+        train_scales (float): the train scale factor.
+        val_scales (float): the validation scale factor.
+        test_scales (float): the test scale factor.
+    Returns:
+        train_csv_path (str): the path to the train csv file.
+        val_csv_path (str): the path to the val csv file.
+        test_csv_path (str): the path to the test csv file.
+    """
     video_names = os.listdir(data_path)
     label_names = os.listdir(label_path)
 
@@ -335,8 +255,6 @@ def dataset_partition_oversampling(data_path, label_path, output_path, target_la
 
     # Create a DataFrame from video_to_label
     df = pd.DataFrame(list(video_to_label.items()), columns=['video_name', 'labels'])
-
-    # Step 3: Convert labels to a categorical format for stratification
     df['labels'] = df['labels'].apply(lambda x: tuple(x.items()))
 
     # Split the data into training and temporary (validation + test)
@@ -344,8 +262,15 @@ def dataset_partition_oversampling(data_path, label_path, output_path, target_la
     val_df, test_df = train_test_split(temp_df, test_size=(test_scales / (val_scales + test_scales)), stratify=temp_df['labels'])
 
     # Perform oversampling to balance the dataset
-    # train_df = oversample(train_df, target_labels)
-    train_df = smote_oversample(train_df, target_labels)
+    if sampling == "mixed":
+        train_df = smote_tomek_sampling(train_df)
+    elif sampling == "oversample":
+        train_df = oversample(train_df)
+    elif sampling == "undersample":
+        train_df = undersample(train_df)
+    else:
+        print(f"Error! No sampling named as: {sampling}. ")
+        return 0
 
     def write_to_csv(file_path, df):
         with open(file_path, 'w', newline='') as f:

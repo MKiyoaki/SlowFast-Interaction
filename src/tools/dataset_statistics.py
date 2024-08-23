@@ -13,8 +13,8 @@ def check(yyyy="2022"):
         ww = f"w{i}"
         data_dir, video_dir, label_dir = get_frame_data_dir(yyyy, ww)
 
-        print(get_set_distribution(os.path.join(data_dir, "vis.csv")))
-        print(get_set_distribution_percentage(os.path.join(data_dir, "vis.csv")))
+        print(get_set_distribution(os.path.join(data_dir, "train.csv")))
+        print(get_set_distribution_percentage(os.path.join(data_dir, "train.csv")))
         # print(get_set_no_overlapping(os.path.join(data_dir, "vis.csv"), ["UserAwkwardness", "RobotMistake"]))
 
 

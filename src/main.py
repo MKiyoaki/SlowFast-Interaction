@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from helper.configurations import get_raw_data_dir, get_clip_data_dir, get_frame_data_dir
 from helper.data_pre_process import (
-    dataset_partition_oversampling,
+    dataset_partition,
     dataset_get_vis,
 )
 from helper.dataset_helper import (
@@ -43,9 +43,10 @@ def generate_dataset():
 
         data_dir_k, video_dir, label_dir = get_frame_data_dir(yyyy, ww)
 
-        dataset_partition_oversampling(
+        dataset_partition(
             video_dir, label_dir, data_dir_k,
             target_labels=["UserAwkwardness"],
+            sampling="oversample",
             train_scales=0.7,
             test_scales=0.15,
             val_scales=0.15
