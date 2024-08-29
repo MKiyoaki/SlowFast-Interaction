@@ -2,7 +2,7 @@
 
 ### 1. Introduction
 
-PySlowFast is basing on the framework of PySlowFast, 
+SlowFast-Interaction is basing on the framework of PySlowFast that used for deploying explainability tools in detecting and classifying Interaction Rupture. 
 
 ### 2. Getting Start
 
