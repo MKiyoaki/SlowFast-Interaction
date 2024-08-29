@@ -30,18 +30,18 @@ def combine_output(yyyy, label, model_name):
     else:
         return 0
 
-    combine_videos(f"{output_dir}/interaction/{yyyy}/slowfast/{label}/{model_name}/grad_cam/Path_1/{label_full}",
+    combine_videos(f"{output_dir}/interaction/{yyyy}/slowfast/{label}/{model_name}/grad_cam/Path_1/{label_full}_True",
                   f"{output_dir}/interaction/{yyyy}/slowfast/{label}/{model_name}/grad_cam/")
 
-    combine_frames(f"{output_dir}/interaction/{yyyy}/slowfast/{label}/{model_name}/grad_cam/Path_0/{label_full}",
+    combine_frames(f"{output_dir}/interaction/{yyyy}/slowfast/{label}/{model_name}/grad_cam/Path_0/{label_full}_True",
                    f"{output_dir}/interaction/{yyyy}/slowfast/{label}/{model_name}/grad_cam/")
 
 
 if __name__ == "__main__":
     yyyy = "2022"
-    ww = "w4"
+    ww = "w1"
     label = "ua"
-    model_name = "res_w4_step"
+    model_name = "res_w1_step"
 
     label_full = ""
     if label == "ua":
@@ -53,5 +53,5 @@ if __name__ == "__main__":
     output = f"{output_dir}/interaction/{yyyy}/slowfast/{label}/{model_name}/grad_cam2/clustering"
 
     combine_output(yyyy, label, model_name)
-    convert_video_to_frame(input)
-    kmeans_clustering_images(os.path.join(input, "../imgs"), output, 3)
+    # convert_video_to_frame(input)
+    # kmeans_clustering_images(os.path.join(input, "../imgs"), output, 3)
