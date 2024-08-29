@@ -5,6 +5,14 @@ from helper.configurations import get_clip_data_dir
 
 
 def get_set_length(file_path):
+    """
+    Return the length or the total number of samples in a given dataset file (.csv).
+
+    Args:
+        file_path (str): The path to the dataset file (.csv).
+    Returns:
+        res (int): Length of the given dataset.
+    """
     data_file = pd.read_csv(file_path)
 
     return len(data_file)
@@ -42,6 +50,7 @@ def get_set_distribution(file_path):
     Get the distribution of all the classes of labels for a dataset file.
     A dataset is a .csv file contains two columns: path to data, path to label.
     The results will be presented as the exact number stored in a dictionary.
+
     Args:
         file_path: The path to the annotation file.
     Return:
@@ -77,11 +86,13 @@ def get_set_distribution_percentage(file_path):
     Get the distribution of all the classes of labels for a dataset file.
     A dataset is a .csv file contains two columns: path to data, path to label.
     The results will be presented as the percentage stored in a dictionary.
+
     Args:
         file_path: The path to the annotation file.
     Return:
         labels: The dictionary stored with the percentage results of all classes in the annotation file.
     """
+
     labels = get_set_distribution(file_path)
     length = get_set_length(file_path)
     for key in labels:
@@ -92,6 +103,15 @@ def get_set_distribution_percentage(file_path):
 
 
 def generate_combined_labels(file_paths, output_path):
+    """
+    Combined the given table files (which is a list contains the paths to them) into a large table file, and
+    store the output at the output_path folder.
+
+    Args:
+        file_paths (list): A list of paths to the table files.
+        output_path (str): The path to the output folder.
+    """
+
     combined_df = pd.DataFrame()
 
     for file_path in file_paths:
@@ -105,6 +125,8 @@ def generate_combined_labels(file_paths, output_path):
 
     try:
         # Write the combined DataFrame to the output path
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
         combined_df.to_csv(output_path, index=False)
         print(f"Combined labels file saved to {output_path}")
     except Exception as e:

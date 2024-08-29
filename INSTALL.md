@@ -8,6 +8,7 @@
   conda create -n slowfast python=3.8 -y
   conda activate slowfast
   ```
+3. Install gcc & g++ >= 5.4
 
 ### 2. Install PySlowFast
 
@@ -25,8 +26,8 @@
    > - iopath: `pip install -U iopath` or `conda install -c iopath iopath -y`
    > - psutil: `pip install psutil`
    > - OpenCV: `pip install opencv-python`
-   > - tensorboard: `pip install tensorboard`
-   > - moviepy: (optional, for visualizing video on tensorboard) `conda install -c conda-forge moviepy` or `pip install moviepy`
+   > - tensorboard: `conda install tensorboard`
+   > - moviepy: (optional, for visualizing video on tensorboard) `conda install -c conda-forge moviepy -y` or `pip install moviepy`
    > - PyTorchVideo: `pip install "git+https://github.com/facebookresearch/pytorchvideo.git"`
    > - [Detectron2](https://github.com/facebookresearch/detectron2): `python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'`
    > - FairScale: `pip install 'git+https://github.com/facebookresearch/fairscale'`
