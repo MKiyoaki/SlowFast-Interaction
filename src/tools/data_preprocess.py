@@ -20,7 +20,7 @@ def split_videos():
 
         # video_clip_by_duration(raw_video_dir, raw_label_dir, clip_data_dir)
         # video_clip_by_time_step(video_dir, label_dir, frame_data_dir, time_threshold=1, time_step=1)
-        video_clip(video_dir, label_dir, frame_data_dir, time_threshold=1, time_step=1) # need test
+        video_lip(raw_video_dir, raw_label_dir, frame_data_dir, time_threshold=1, time_step=1) # need test
 
 
 def generate_dataset():

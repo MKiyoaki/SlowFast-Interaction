@@ -116,7 +116,6 @@ def video_clip(raw_data_path, raw_label_path, clip_data_path, time_threshold=1, 
     those durations by a fixed time step. If the current clip is within a label's duration, the corresponding
     label will be attached to the clip.
     This is the combination of previous two methods.
-    TODO: Test this method.
 
     Args:
         raw_data_path (string): Path to the raw videos.
@@ -163,7 +162,7 @@ def video_clip(raw_data_path, raw_label_path, clip_data_path, time_threshold=1, 
                         segment_label = pd.DataFrame([label['features']])
                         segment_label['start_time'] = segment_start
                         segment_label['end_time'] = segment_end
-                        segment_label.to_csv(os.path.join(label_output_path, f"{file_name}_{idx + 1}_part_{i + 1}.csv"),
+                        segment_label.to_csv(os.path.join(label_output_path, f"{file_name}_{idx + 1}_{i + 1}.csv"),
                                              index=False)
                 else:
                     # If the duration is less than or equal to the threshold, no further splitting
