@@ -2,7 +2,7 @@
 
 ### 1. Introduction
 
-SlowFast-Interaction is basing on the framework of PySlowFast that used for deploying explainability tools in detecting and classifying Interaction Rupture. 
+SlowFast-Interaction is basing on the framework of PySlowFast, aims to explore the application of explainable AI paradigm in detecting and classifying human's responses to different types of Interaction Ruptures. 
 
 ### 2. Getting Start
 
