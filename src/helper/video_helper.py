@@ -118,28 +118,15 @@ def extract_frames_from_video(video_dir, frame_count=1):
 
 
 def convert_video_to_frame(video_dir, frame_count=1):
-    """
-    从指定目录中的所有视频中提取帧，并将帧保存到平行目录的 imgs 文件夹中。
-
-    参数:
-    - video_dir (str): 包含视频文件的目录路径。
-    - frame_count (int): 要从每个视频中提取的帧数。
-
-    返回:
-    - frames (list): 提取的帧图像列表。
-    """
-
-    # 创建输出目录
-    output_dir = os.path.join(os.path.dirname(video_dir), 'imgs')
+    output_dir = os.path.join(os.path.dirname(video_dir), '../imgs')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    frames = []  # 存储所有视频提取的帧
+    frames = []
 
-    # 遍历目录中的所有视频文件
     for video in os.listdir(video_dir):
         video_path = os.path.join(video_dir, video)
-        video_name = os.path.splitext(video)[0]  # 获取视频文件名（不包括扩展名）
+        video_name = os.path.splitext(video)[0]  # Get the filename
 
         cap = cv2.VideoCapture(video_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -150,7 +137,6 @@ def convert_video_to_frame(video_dir, frame_count=1):
             ret, frame = cap.read()
             if ret:
                 frames.append(frame)
-                # 生成每个帧的唯一文件名
                 frame_filename = f"{video_name}_frame_{i}.png"
                 frame_path = os.path.join(output_dir, frame_filename)
                 cv2.imwrite(frame_path, frame)

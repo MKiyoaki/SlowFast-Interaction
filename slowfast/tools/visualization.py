@@ -5,6 +5,7 @@ import pickle
 
 import cv2
 import numpy as np
+import pandas as pd
 import torchvision
 
 import slowfast.datasets.utils as data_utils
@@ -104,11 +105,14 @@ def run_visualization(vis_loader, model, cfg, writer=None):
             activations, preds = model_vis.get_activations(inputs)
         if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.ENABLE:
             if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
-                inputs, preds, activation_avg = gradcam(inputs, labels=labels)
+                inputs, preds, activation_avg, localization_avg = gradcam(inputs, labels=labels)
             else:
-                inputs, preds, activation_avg = gradcam(inputs)
-            if torch.argmax(preds, dim=1) == labels:
-                activation_avgs.append(activation_avg)
+                inputs, preds, activation_avg, localization_avg = gradcam(inputs)
+            # Records the activation value for videos
+            for idx in range(len(preds)):
+                if torch.argmax(preds, dim=1)[idx] == labels[idx]:
+                    activation_avgs.append(activation_avg)
+
         if cfg.NUM_GPUS:
             inputs = du.all_gather_unaligned(inputs)
             activations = du.all_gather_unaligned(activations)
@@ -214,21 +218,42 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                     if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
                                         class_labels = labels
                                     else:
-                                        class_labels = np.array(cur_preds[cur_batch_idx] > cfg.TEST.GLOBAL_THRESHOLD, dtype=int)  # Convert to binary labels
+                                        class_labels = (
+                                            np.array(cur_preds[cur_batch_idx] > cfg.TEST.GLOBAL_THRESHOLD, dtype=int))  # Convert to binary labels
+
                                     for idx, label in enumerate(class_labels):
+                                        is_true = idx == labels[cur_batch_idx]
                                         if label == 1.0:
-                                            class_name = class_names[idx]
+                                            class_name = f"{class_names[idx]}_{is_true}"
                                             class_dir = os.path.join(dir, class_name)
                                             if not os.path.exists(class_dir):
                                                 os.makedirs(class_dir)
 
                                             # Save the video to the corresponding class directory
-                                            video_filename = f"{filename[0]}_path.mp4"
+                                            video_filename = f"{filename[0]}_grad.mp4"
                                             video_path = os.path.join(class_dir, video_filename)
 
                                             video = video.squeeze(0).permute(0, 2, 3, 1)
                                             video = (video * 255).to(torch.uint8)
                                             torchvision.io.write_video(video_path, video, fps=30)
+
+                                            # TODO
+                                            # if path_idx == 0:
+                                            #     csv_path = os.path.join(cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR,
+                                            #                             f"{class_name}.csv")
+                                            #
+                                            #     new_data = pd.DataFrame({
+                                            #         "Video_path": [video_path],
+                                            #         "Localization_avg": [localization_avg.cpu()]
+                                            #     })
+                                            #
+                                            #     # Check if file exists to determine if header is needed
+                                            #     if os.path.exists(csv_path):
+                                            #         # Append mode, without header
+                                            #         new_data.to_csv(csv_path, mode='a', header=False, index=False)
+                                            #     else:
+                                            #         # Write mode, with header
+                                            #         new_data.to_csv(csv_path, mode='w', header=True, index=False)
 
                     if cfg.TENSORBOARD.MODEL_VIS.ACTIVATIONS:
                         writer.plot_weights_and_activations(
@@ -239,8 +264,6 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                         )
 
     activation_avgs = np.array(activation_avgs)
-    # activation_avgs = [tensor.cpu().numpy() for tensor in activation_avgs]
-
     logger.info(f"Mean activation value: {round(np.mean(activation_avgs), 4)}")
     logger.info(f"Variance of activation value: {round(np.var(activation_avgs), 4)}")
 

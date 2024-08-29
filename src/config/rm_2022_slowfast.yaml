@@ -1,5 +1,5 @@
 TRAIN:
-  ENABLE: True
+  ENABLE: False
   DATASET: Interaction_rm_2022
   BATCH_SIZE: 32
   EVAL_PERIOD: 1
@@ -13,7 +13,7 @@ DATA:
   TEST_CROP_SIZE: 256
   INPUT_CHANNEL_NUM: [3, 3]
   # ENSEMBLE_METHOD: "avg"
-  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/frame/2022/w1"
+  PATH_TO_DATA_DIR: "/media/kiyoaki/Ventoy/projects/SlowFast-Interaction/data/interaction/frame/2022/w4"
 SLOWFAST:
   ALPHA: 4
   BETA_INV: 8
@@ -41,10 +41,10 @@ SOLVER:
   BASE_LR: 1e-5 # 6e-5
   # -- when LR policy is steps --
   LR_POLICY: steps_with_relative_lrs
-  STEPS: [2, 3, 8, 13, 18, 23, 28, 33, 38]
-  LRS: [5, 10, 5, 2.5, 1.25, 0.625, 0.375, 0.1875, 0.09]
+  STEPS: [2, 3, 8, 13, 18, 23, 28, 33, 38, 43, 48]
+  LRS: [5, 10, 5, 2.5, 1.25, 0.625, 0.375, 0.1875, 0.09375, 0.046875]
   # LR_POLICY: cosine
-  MAX_EPOCH: 38
+  MAX_EPOCH: 50
   MOMENTUM: 0.9
   WEIGHT_DECAY: 1e-3
   WARMUP_EPOCHS: 3.0 # 1.0
@@ -61,19 +61,19 @@ TEST:
   ENABLE: True
   DATASET: Interaction_ua_2022
   GLOBAL_THRESHOLD: 0.5
-  BATCH_SIZE: 64
+  BATCH_SIZE: 96
 DATA_LOADER:
   NUM_WORKERS: 16
   PIN_MEMORY: True
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: "./outputs/interaction/2022/slowfast/rm/1_w1_step"
+OUTPUT_DIR: "./outputs/interaction/2022/slowfast/rm/1_w4_step"
 TENSORBOARD:
   ENABLE: True
-  # CLASS_NAMES_PATH: "./src/config/names/class_id_ua.json" # "./src/config/names/class_id_ua.json"
+  CLASS_NAMES_PATH: "./src/config/names/class_id_rm.json" # "./src/config/names/class_id_ua.json"
   MODEL_VIS:
-    ENABLE: False
+    ENABLE: True
     MODEL_WEIGHTS: False
     ACTIVATIONS: False
     INPUT_VIDEO: False
@@ -81,5 +81,5 @@ TENSORBOARD:
     GRAD_CAM:
       ENABLE: True
       USE_TRUE_LABEL: False
-      # OUTPUT_DIR: "../outputs/interaction/2022/w1/slowfast/ua/grad_cam"
+      # OUTPUT_DIR: "./outputs/interaction/2022/w1/slowfast/ua/grad_cam"
       LAYER_LIST: ['s5', 's4_fuse'] # The number of layer must be equal to the number of pathway(s).

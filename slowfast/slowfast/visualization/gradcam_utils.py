@@ -143,12 +143,26 @@ class GradCAM:
             result_ls (list of tensor(s)): the visualized inputs.
             preds (tensor): shape (n_instances, n_class). Model predictions for `inputs`.
             activations (list of tensor(s)): the activation values corresponding to the inputs.
+            localization_map_avg (tensor): the averaged localization map across all inputs.
         """
         result_ls = []
         localization_maps, preds = self._calculate_localization_map(inputs, labels=labels)
 
+        # Adjust the temporal dimension T to be consistent across all localization maps
+        max_T = max(localization_map.shape[2] for localization_map in localization_maps)
+        resized_localization_maps = []
+        for localization_map in localization_maps:
+            B, C, T, H, W = localization_map.shape
+            if T != max_T:
+                localization_map = F.interpolate(localization_map, size=(max_T, H, W), mode="trilinear",
+                                                 align_corners=False)
+            resized_localization_maps.append(localization_map)
+
+        # Compute the average localization map across all inputs
+        localization_map_avg = torch.mean(torch.stack(resized_localization_maps), dim=0)
+
         activations = []
-        for i, localization_map in enumerate(localization_maps):
+        for i, localization_map in enumerate(resized_localization_maps):
             # Convert (B, 1, T, H, W) to (B, T, H, W)
             localization_map = localization_map.squeeze(dim=1)
             if localization_map.device != torch.device("cpu"):
@@ -164,16 +178,17 @@ class GradCAM:
             )
             heatmap = torch.from_numpy(heatmap)
             curr_inp = alpha * heatmap + (1 - alpha) * curr_inp
-            # Permute inp to (B, T, C, H, W)
+            # Permute input back to (B, T, C, H, W)
             curr_inp = curr_inp.permute(0, 1, 4, 2, 3)
             result_ls.append(curr_inp)
 
             # Extract activation value and abstract it to a float
-            activation = self.activations[self.target_layers[i]] # localization_map
+            activation = self.activations[self.target_layers[i]]
             # Global Maximum Pooling to abstract the activation value to a single float
             activation_value = activation.max().item()
             activations.append(activation_value)
 
+        # Calculate the average activation value
         activation_avg = sum(activations) / len(activations)
 
-        return result_ls, preds, activation_avg
+        return result_ls, preds, activation_avg, localization_map_avg

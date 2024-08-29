@@ -1,5 +1,5 @@
 TRAIN:
-  ENABLE: True
+  ENABLE: False
   DATASET: Interaction_ua_2022
   BATCH_SIZE: 32
   EVAL_PERIOD: 1
@@ -58,17 +58,17 @@ MODEL:
   LOSS_FUNC: cross_entropy
   DROPOUT_RATE: 0.5
 TEST:
-  ENABLE: True
+  ENABLE: False
   DATASET: Interaction_ua_2022
   GLOBAL_THRESHOLD: 0.5 # 0.51
-  BATCH_SIZE: 128
+  BATCH_SIZE: 96
 DATA_LOADER:
   NUM_WORKERS: 16
   PIN_MEMORY: True
 NUM_GPUS: 1
 NUM_SHARDS: 1
 RNG_SEED: 0
-OUTPUT_DIR: "./outputs/interaction/2022/slowfast/ua/4_w1_step"
+OUTPUT_DIR: "./outputs/interaction/2022/slowfast/ua/res_w1_step"
 TENSORBOARD:
   ENABLE: True
   CLASS_NAMES_PATH: "./src/config/names/class_id_ua.json"
@@ -81,5 +81,5 @@ TENSORBOARD:
     GRAD_CAM:
       ENABLE: True
       USE_TRUE_LABEL: False
-      OUTPUT_DIR: "./outputs/interaction/2022/slowfast/ua/4_w1_step/grad_cam"
+      OUTPUT_DIR: "./outputs/interaction/2022/slowfast/ua/res_w1_step/grad_cam2"
       LAYER_LIST: ['s5', 's4_fuse'] # The number of layer must be equal to the number of pathway(s).

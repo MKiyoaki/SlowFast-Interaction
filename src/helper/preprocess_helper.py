@@ -1,22 +1,26 @@
 import os
-import random
 import csv
 import shutil
 
 import pandas as pd
 import time
 
-from imblearn.combine import SMOTETomek, SMOTEENN
+from imblearn.combine import SMOTETomek
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
-from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
+from sklearn.preprocessing import MultiLabelBinarizer
 
 
 def video_clip_by_duration(raw_data_path, raw_label_path, clip_data_path):
     """
-    Split the video into clips according to the duration annotation in the label files.
+    Split the raw video into clips according to the duration annotation in the label files. The outputs will
+    be stored in the clip_data_path folder.
 
+    Args:
+        raw_data_path (string): Path to the raw videos.
+        raw_label_path (string): Path to the raw label files.
+        clip_data_path (string): Path to the clip data.
     """
     # Create output directory if not exists
     video_output_path = os.path.join(clip_data_path, 'videos')
@@ -54,6 +58,19 @@ def video_clip_by_duration(raw_data_path, raw_label_path, clip_data_path):
 
 
 def video_clip_by_time_step(raw_data_path, raw_label_path, clip_data_path, time_threshold=1, time_step=1):
+    """
+    Further split the video from duration into clips according to the time step and threshold value. The outputs
+    will be stored in the clip_data_path folder.
+    The time step means the final length for each clip. Threshold means the least length for videos to get splitting,
+    otherwise the video will be ignored.
+
+    Args:
+        raw_data_path (string): Path to the raw videos.
+        raw_label_path (string): Path to the raw label files.
+        clip_data_path (string): Path to the clip data.
+        time_threshold (int): Threshold for the time step.
+        time_step (int): The time step for splitting, or the final length for each clip.
+     """
     # Create output directory if not exists
     video_output_path = os.path.join(clip_data_path, 'videos')
     label_output_path = os.path.join(clip_data_path, 'labels')
@@ -93,9 +110,81 @@ def video_clip_by_time_step(raw_data_path, raw_label_path, clip_data_path, time_
                             shutil.copyfile(label_path, new_label_path)
 
 
+def video_clip(raw_data_path, raw_label_path, clip_data_path, time_threshold=1, time_step=1):
+    """
+    Split the raw video into clips directly based on the label duration information, and further clip within
+    those durations by a fixed time step. If the current clip is within a label's duration, the corresponding
+    label will be attached to the clip.
+    This is the combination of previous two methods.
+    TODO: Test this method.
+
+    Args:
+        raw_data_path (string): Path to the raw videos.
+        raw_label_path (string): Path to the raw label files.
+        clip_data_path (string): Path to the output clips.
+        time_threshold (float): Minimum duration threshold for further splitting.
+        time_step (float): Time step for splitting clips further.
+    """
+    # Create output directory if not exists
+    video_output_path = os.path.join(clip_data_path, 'videos')
+    label_output_path = os.path.join(clip_data_path, 'labels')
+    os.makedirs(video_output_path, exist_ok=True)
+    os.makedirs(label_output_path, exist_ok=True)
+
+    label_files = os.listdir(raw_label_path)
+    for label_file in label_files:
+        # Load labels
+        file_name = os.path.splitext(label_file)[0]
+        labels = get_label(os.path.join(raw_label_path, label_file))
+
+        with VideoFileClip(os.path.join(raw_data_path, f"{file_name}.avi")) as video:
+            for idx, label in enumerate(labels):
+                start_time = label['start_time']
+                end_time = label['end_time']
+                duration = end_time - start_time
+
+                if duration > time_threshold:
+                    # Further split based on time_step if duration exceeds time_threshold
+                    num_clips = int(duration // time_step)
+
+                    for i in range(num_clips):
+                        segment_start = start_time + i * time_step
+                        segment_end = segment_start + time_step
+                        if segment_end > end_time:
+                            segment_end = end_time
+
+                        clip = video.subclip(segment_start, segment_end)
+
+                        new_video_name = f"{file_name}_{idx + 1}_part_{i + 1}.avi"
+                        new_video_path = os.path.join(video_output_path, new_video_name)
+                        clip.write_videofile(new_video_path, codec="libx264", audio_codec="aac")
+
+                        # Save the label corresponding to the clip
+                        segment_label = pd.DataFrame([label['features']])
+                        segment_label['start_time'] = segment_start
+                        segment_label['end_time'] = segment_end
+                        segment_label.to_csv(os.path.join(label_output_path, f"{file_name}_{idx + 1}_part_{i + 1}.csv"),
+                                             index=False)
+                else:
+                    # If the duration is less than or equal to the threshold, no further splitting
+                    clip = video.subclip(start_time, end_time)
+                    new_video_name = f"{file_name}_{idx + 1}.avi"
+                    new_video_path = os.path.join(video_output_path, new_video_name)
+                    clip.write_videofile(new_video_path, codec="libx264", audio_codec="aac")
+
+                    # Save the label corresponding to the clip
+                    label_data = pd.DataFrame([label['features']])
+                    label_data['start_time'] = start_time
+                    label_data['end_time'] = end_time
+                    label_data.to_csv(os.path.join(label_output_path, f"{file_name}_{idx + 1}.csv"), index=False)
+
+    return 0
+
+
 def get_label(label_path):
     """
     Load labels for a given video path.
+
     Args:
         label_path (str): the path to the label file.
     Returns:
@@ -120,11 +209,20 @@ def get_label(label_path):
 
 
 def dataset_get_vis(output_path, data_path, label_path):
-    # Step 1: Read video and label names
+    """
+    Create a dataset called vis.csv, contains all the videos without any oversampling or undersampling results.
+    This is used for generating Grad-CAM results.
+
+    Args：
+        output_path (str): the path to the output directory.
+        data_path (str): the path to the data directory.
+        label_path (str): the path to the label file.
+    """
+    # Read video and label names
     video_names = os.listdir(data_path)
     label_names = os.listdir(label_path)
 
-    # Step 2: Create a mapping of video to labels
+    # Create a mapping of video to labels
     video_to_label = []
     for video_name in video_names:
         label_file = find_label_file(video_name, label_names)
@@ -135,7 +233,7 @@ def dataset_get_vis(output_path, data_path, label_path):
         else:
             print(f"[{time.time()}][Error] Label file not found for {video_name}.")
 
-    # Step 3: Write the complete list to a CSV file
+    # Write the complete list to a CSV file
     output_csv_path = os.path.join(output_path, "vis.csv")
 
     # Create output directory if it doesn't exist
@@ -190,6 +288,7 @@ def oversample(df):
 
 
 def smote_tomek_sampling(df):
+    # TODO: Doesn't work correctly.
     # Flatten the label dictionaries for compatibility with SMOTE/ENN
     df_flat = pd.DataFrame(df['labels'].tolist(), index=df.index)
 
@@ -212,25 +311,27 @@ def smote_tomek_sampling(df):
 
     return resampled_df
 
+
 def dataset_partition(
             data_path,
             label_path,
             output_path,
             target_labels,
-            sampling="mixed",
-            train_scales=0.8,
-            val_scales=0.1,
-            test_scales=0.1
+            sampling="oversample",
+            train_scales=0.7,
+            val_scales=0.15,
+            test_scales=0.15
     ):
     """
-    Dataset partition methods.
+    Dataset partition methods. During this process user can choose a sampling strategy. This will produce three files
+    that contains the path of data in train, test, val sets.
 
     Args:
         data_path (str): the path to the data folder.
         label_path (str): the path to the label file.
         output_path (str): the path to the output folder.
         target_labels (list): the target labels.
-        sampling (str): the sampling strategy. Can only be chosen from "mixed", "oversample" or "undersample".
+        sampling (str): the sampling strategy. Can only be chosen from "none", "mixed", "oversample" or "undersample".
         train_scales (float): the train scale factor.
         val_scales (float): the validation scale factor.
         test_scales (float): the test scale factor.
@@ -254,7 +355,10 @@ def dataset_partition(
             video_to_label[video_name] = labels_df[label_columns].iloc[0].to_dict()
 
     # Create a DataFrame from video_to_label
-    df = pd.DataFrame(list(video_to_label.items()), columns=['video_name', 'labels'])
+    df = pd.DataFrame(
+        list(video_to_label.items()),
+        columns=['video_name', 'labels']
+    )
     df['labels'] = df['labels'].apply(lambda x: tuple(x.items()))
 
     # Split the data into training and temporary (validation + test)
@@ -268,6 +372,8 @@ def dataset_partition(
         train_df = oversample(train_df)
     elif sampling == "undersample":
         train_df = undersample(train_df)
+    elif sampling == "none":
+        pass
     else:
         print(f"Error! No sampling named as: {sampling}. ")
         return 0
@@ -301,6 +407,16 @@ def dataset_partition(
 
 
 def find_label_file(video_name, label_names):
+    """
+    Helper method for dataset partition. This could get the name of label file according to the name of
+    video file.
+
+    Args:
+        video_name (str): the name of the video.
+        label_names (list): the label names.
+    Return:
+        label_name (str): the name of the label.
+    """
     video_basename = os.path.splitext(video_name)[0]  # remove extension
     for label_name in label_names:
         if label_name.startswith(video_basename):
