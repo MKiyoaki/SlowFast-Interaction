@@ -7,6 +7,7 @@ import os
 import pickle
 
 import numpy as np
+import sklearn
 
 import slowfast.utils.checkpoint as cu
 import slowfast.utils.distributed as du
@@ -15,7 +16,8 @@ import slowfast.utils.misc as misc
 import slowfast.visualization.tensorboard_vis as tb
 import torch
 from slowfast.datasets import loader
-from slowfast.models import build_model
+from slowfast.models import build_model, losses
+from slowfast.utils import metrics
 from slowfast.utils.env import pathmgr
 from slowfast.utils.meters import AVAMeter, TestMeter
 
@@ -126,6 +128,15 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         if not cfg.VIS_MASK.ENABLE:
             # Update and log stats.
             test_meter.update_stats(preds.detach(), labels.detach(), video_idx.detach())
+
+        loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
+        loss = loss_fun(preds, labels)
+        if writer is not None:
+            writer.add_scalars(
+                {"Test/loss": loss},
+                global_step=cur_iter,
+            )
+
         test_meter.log_iter_stats(cur_iter)
 
         test_meter.iter_tic()
@@ -138,6 +149,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
             all_preds = all_preds.cpu()
             all_labels = all_labels.cpu()
         if writer is not None:
+            # Log F1 score and average accuracies
             writer.plot_eval(preds=all_preds, labels=all_labels)
 
         if cfg.TEST.SAVE_RESULTS_PATH != "":
@@ -149,7 +161,7 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
 
             logger.info("Successfully saved prediction results to {}".format(save_path))
 
-    test_meter.finalize_metrics()
+    test_meter.finalize_metrics(ks=[1] if cfg.MODEL.NUM_CLASSES < 5 else [1, 5])
     return test_meter
 
 
@@ -227,6 +239,7 @@ def test(cfg):
                     else cfg.CONTRASTIVE.NUM_CLASSES_DOWNSTREAM
                 ),
                 len(test_loader),
+                cfg.TEST.GLOBAL_THRESHOLD,
                 cfg.DATA.MULTI_LABEL,
                 cfg.DATA.ENSEMBLE_METHOD,
             )
@@ -251,20 +264,51 @@ def test(cfg):
                 view, cfg.TEST.NUM_SPATIAL_CROPS
             )
         )
-        result_string_views += "_{}a{}" "".format(view, test_meter.stats["top1_acc"])
+        if not cfg.DATA.MULTI_LABEL:
+            result_string_views += "_{}a{}" "".format(view, test_meter.stats["top1_acc"])
 
-        result_string = (
-            "_p{:.2f}_f{:.2f}_{}a{} Top5 Acc: {} MEM: {:.2f} f: {:.4f}"
-            "".format(
-                params / 1e6,
-                flops,
-                view,
-                test_meter.stats["top1_acc"],
-                test_meter.stats["top5_acc"],
-                misc.gpu_mem_usage(),
-                flops,
+            if "top5_acc" in test_meter.stats.keys():
+                result_string = (
+                    "_p{:.2f}_f{:.2f}_{} Top1 Acc: {} F1: {:.2f} Top5 Acc: {} MEM: {:.2f} f: {:.4f}"
+                    "".format(
+                        params / 1e6,
+                        flops,
+                        view,
+                        test_meter.stats["f1"],
+                        test_meter.stats["top1_acc"],
+                        test_meter.stats["top5_acc"],
+                        misc.gpu_mem_usage(),
+                        flops,
+                    )
+                )
+            else:
+                result_string = (
+                    "_p{:.2f}_f{:.2f}_{} Top1 Acc: {} F1: {:.2f} MEM: {:.2f} f: {:.4f}"
+                    "".format(
+                        params / 1e6,
+                        flops,
+                        view,
+                        test_meter.stats["top1_acc"],
+                        test_meter.stats["f1"],
+                        misc.gpu_mem_usage(),
+                        flops,
+                    )
+                )
+        else:
+            result_string_views += "_{}a{:.2f}" "".format(view, test_meter.stats["f1"])
+
+            result_string = (
+                "_p{:.2f}_f{:.2f}_{} F1: {:.2f} Avg Acc: {:.2f} MEM: {:.2f} f: {:.4f}"
+                "".format(
+                    params / 1e6,
+                    flops,
+                    view,
+                    test_meter.stats["f1"],
+                    test_meter.stats["avg_acc"],
+                    misc.gpu_mem_usage(),
+                    flops,
+                )
             )
-        )
 
         logger.info("{}".format(result_string))
     logger.info("{}".format(result_string_views))

@@ -15,7 +15,7 @@ import slowfast.utils.metrics as metrics
 import slowfast.utils.misc as misc
 import torch
 from fvcore.common.timer import Timer
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, confusion_matrix
 from slowfast.utils.ava_eval_helper import (
     evaluate_ava,
     read_csv,
@@ -251,6 +251,7 @@ class TestMeter:
         num_clips,
         num_cls,
         overall_iters,
+        threshold,
         multi_label=False,
         ensemble_method="sum",
     ):
@@ -264,6 +265,7 @@ class TestMeter:
                 aggregating the final prediction for the video.
             num_cls (int): number of classes for each prediction.
             overall_iters (int): overall iterations for testing.
+            threshold (float): threshold for predication.
             multi_label (bool): if True, use map as the metric.
             ensemble_method (str): method to perform the ensemble, options
                 include "sum", and "max".
@@ -278,6 +280,9 @@ class TestMeter:
         self.ensemble_method = ensemble_method
         # Initialize tensors.
         self.video_preds = torch.zeros((num_videos, num_cls))
+        self.video_preds_list = []
+        self.labels_list = []
+        self.threshold = threshold
         if multi_label:
             self.video_preds -= 1e10
 
@@ -299,6 +304,8 @@ class TestMeter:
         """
         self.clip_count.zero_()
         self.video_preds.zero_()
+        self.video_preds_list = []
+        self.labels_list = []
         if self.multi_label:
             self.video_preds -= 1e10
         self.video_labels.zero_()
@@ -316,25 +323,33 @@ class TestMeter:
             clip_ids (tensor): clip indexes of the current batch, dimension is
                 N.
         """
-        for ind in range(preds.shape[0]):
+        for ind in range(preds.shape[0]):   # batch_size
             vid_id = int(clip_ids[ind]) // self.num_clips
-            if self.video_labels[vid_id].sum() > 0:
-                assert torch.equal(
-                    self.video_labels[vid_id].type(torch.FloatTensor),
-                    labels[ind].type(torch.FloatTensor),
-                )
+            # if self.video_labels[vid_id].sum() > 0:
+            #     assert torch.equal(
+            #         self.video_labels[vid_id].type(torch.FloatTensor),
+            #         labels[ind].type(torch.FloatTensor),
+            #     )
             self.video_labels[vid_id] = labels[ind]
-            if self.ensemble_method == "sum":
-                self.video_preds[vid_id] += preds[ind]
-            elif self.ensemble_method == "max":
-                self.video_preds[vid_id] = torch.max(
-                    self.video_preds[vid_id], preds[ind]
-                )
-            else:
-                raise NotImplementedError(
-                    "Ensemble Method {} is not supported".format(self.ensemble_method)
-                )
+            if not self.multi_label:
+                if self.ensemble_method == "sum":
+                    # self.video_preds[vid_id] += preds[ind].item()
+                    self.video_preds_list.append(preds[ind])
+                    self.labels_list.append(labels[ind])
+                elif self.ensemble_method == "max":
+                    self.video_preds[vid_id] = torch.max(
+                        self.video_preds[vid_id], preds[ind].item()
+                    )
+                else:
+                    raise NotImplementedError(
+                        "Ensemble Method {} is not supported".format(self.ensemble_method)
+                    )
             self.clip_count[vid_id] += 1
+
+        if self.multi_label:
+            # Multi label case
+            self.video_preds_list.append(preds.mean(dim=0))
+            self.labels_list.append(labels.mean(dim=0))
 
     def log_iter_stats(self, cur_iter):
         """
@@ -370,7 +385,7 @@ class TestMeter:
         self.data_timer.pause()
         self.net_timer.reset()
 
-    def finalize_metrics(self, ks=(1, 5)):
+    def finalize_metrics(self, ks):
         """
         Calculate and log the final ensembled metrics.
         ks (tuple): list of top-k values for topk_accuracies. For example,
@@ -388,22 +403,56 @@ class TestMeter:
 
         self.stats = {"split": "test_final"}
         if self.multi_label:
+            # multi label case
             mean_ap = get_map(
                 self.video_preds.cpu().numpy(), self.video_labels.cpu().numpy()
             )
+            assert len(self.video_preds_list) == len(self.labels_list)
+            self.video_preds_tensor = torch.stack(self.video_preds_list)
+            self.video_labels_tensor = torch.stack(self.labels_list)
+
+            f1 = metrics.f1_scores_multi_label(self.video_preds_tensor,  self.video_labels_tensor, average="weighted")
+            avg_acc = metrics.accuracies_multi_label(self.video_preds_tensor,  self.video_labels_tensor)
             map_str = "{:.{prec}f}".format(mean_ap * 100.0, prec=2)
             self.stats["map"] = map_str
-            self.stats["top1_acc"] = map_str
-            self.stats["top5_acc"] = map_str
+            self.stats["f1"] = f1
+            self.stats["avg_acc"] = avg_acc
         else:
-            num_topks_correct = metrics.topks_correct(
-                self.video_preds, self.video_labels, ks
-            )
-            topks = [(x / self.video_preds.size(0)) * 100.0 for x in num_topks_correct]
+            # Compute the errors.
+            self.video_preds_list = torch.stack(self.video_preds_list)
+            self.labels_list = torch.stack(self.labels_list)
+
+            self.video_preds_list = torch.where(self.video_preds_list >= self.threshold,
+                                                torch.tensor(1, dtype=self.video_preds_list.dtype),
+                                                torch.tensor(0, dtype=self.video_preds_list.dtype))
+
+            if self.video_preds.shape[1] >= 5:
+                num_topks_correct = metrics.topks_correct(self.video_preds_list, self.labels_list, [1, 5])
+            elif self.video_preds.shape[1] == 2:
+                num_topks_correct = metrics.topks_correct_binary(self.video_preds_list, self.labels_list, [1])
+            else:
+                num_topks_correct = metrics.topks_correct(self.video_preds_list, self.labels_list, [1])
+
+            topks = [(x / self.video_preds_list.size(0)) * 100.0 for x in num_topks_correct]
+
+            if self.video_preds_list.dim() == 2:
+                predicted_classes = torch.argmax(self.video_preds_list, dim=1)
+
+                predicted_classes_np = predicted_classes.cpu().numpy()
+                labels_np = self.labels_list.cpu().numpy()
+
+                cm = confusion_matrix(labels_np, predicted_classes_np)
+                logger.info("Confusion Matrix: ")
+                print(cm)
+
+                macro_acc = metrics.macro_accuracy(predicted_classes_np, labels_np, threshold=self.threshold)
+                logger.info("Macro accuracies: {}".format(round(macro_acc, 4)))
+
             assert len({len(ks), len(topks)}) == 1
             for k, topk in zip(ks, topks):
                 # self.stats["top{}_acc".format(k)] = topk.cpu().numpy()
                 self.stats["top{}_acc".format(k)] = "{:.{prec}f}".format(topk, prec=2)
+            self.stats["f1"] = metrics.f1_scores(self.video_preds, self.video_labels, average="weighted")
         logging.log_json_stats(self.stats)
 
 

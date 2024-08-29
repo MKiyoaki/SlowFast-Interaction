@@ -1,0 +1,6 @@
+{
+  "UserAwkwardness": 0,
+  "RobotInterruption": 1,
+  "RobotNonResponding": 2,
+  "RobotInappropriateResponse": 3
+}

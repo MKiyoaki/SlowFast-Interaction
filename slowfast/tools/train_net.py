@@ -7,6 +7,7 @@ import math
 import pprint
 
 import numpy as np
+import sklearn
 
 import slowfast.models.losses as losses
 import slowfast.models.optimizer as optim
@@ -75,6 +76,10 @@ def train_epoch(
     # Explicitly declare reduction to mean.
     loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
 
+    lrs = []
+    top1_errs = []
+    top5_errs = []
+    loss_vals = []
     for cur_iter, (inputs, labels, index, time, meta) in enumerate(train_loader):
         # Transfer the data to the current GPU device.
         if cfg.NUM_GPUS:
@@ -156,7 +161,7 @@ def train_epoch(
         scaler.unscale_(optimizer)
         # Clip gradients if necessary
         if cfg.SOLVER.CLIP_GRAD_VAL:
-            grad_norm = torch.nn.utils.clip_grad_value_(
+            grad_norm = torch.nn.utils.clip_grad_norm_(
                 model.parameters(), cfg.SOLVER.CLIP_GRAD_VAL
             )
         elif cfg.SOLVER.CLIP_GRAD_L2NORM:
@@ -208,6 +213,7 @@ def train_epoch(
                     loss.item(),
                     grad_norm.item(),
                 )
+
             elif cfg.MASK.ENABLE:
                 # Gather all the predictions across all the devices.
                 if cfg.NUM_GPUS > 1:
@@ -224,10 +230,18 @@ def train_epoch(
                     loss_extra = [one_loss.item() for one_loss in loss_extra]
             else:
                 # Compute the errors.
-                num_topks_correct = metrics.topks_correct(preds, labels, (1, 5))
-                top1_err, top5_err = [
-                    (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
-                ]
+                if cfg.MODEL.NUM_CLASSES >= 5:
+                    num_topks_correct = metrics.topks_correct(preds, labels, [1, 5])
+                    top1_err, top5_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ]
+                else:
+                    num_topks_correct = metrics.topks_correct(preds, labels, [1])
+                    top1_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ][0]
+                    top5_err = -1.0
+
                 # Gather all the predictions across all the devices.
                 if cfg.NUM_GPUS > 1:
                     loss, grad_norm, top1_err, top5_err = du.all_reduce(
@@ -238,8 +252,8 @@ def train_epoch(
                 loss, grad_norm, top1_err, top5_err = (
                     loss.item(),
                     grad_norm.item(),
-                    top1_err.item(),
-                    top5_err.item(),
+                    top1_err,
+                    top5_err,
                 )
 
             # Update and log stats.
@@ -256,20 +270,59 @@ def train_epoch(
                 loss_extra,
             )
             # write to tensorboard format if available.
-            if writer is not None:
-                writer.add_scalars(
-                    {
-                        "Train/loss": loss,
-                        "Train/lr": lr,
-                        "Train/Top1_err": top1_err,
-                        "Train/Top5_err": top5_err,
-                    },
-                    global_step=data_size * cur_epoch + cur_iter,
-                )
+            loss_vals.append(loss)
+            lrs.append(lr)
+            top1_errs.append(top1_err)
+            top5_errs.append(top5_err)
+            # if writer is not None:
+            #     if cfg.DATA.MULTI_LABEL:
+            #         writer.add_scalars(
+            #             {
+            #                 "Train/loss": loss,
+            #                 "Train/lr": lr,
+            #                 "Train/grad_norm": grad_norm,
+            #                 # "Train/Average_accuracies": avg_acc,
+            #             },
+            #             global_step=data_size * cur_epoch + cur_iter,
+            #         )
+            #     else:
+            #         writer.add_scalars(
+            #             {
+            #                 "Train/loss": loss,
+            #                 "Train/lr": lr,
+            #                 "Train/Top1_err": top1_err,
+            #                 "Train/Top5_err": top5_err,
+            #                 "Train/grad_norm": grad_norm,
+            #             },
+            #             global_step=data_size * cur_epoch + cur_iter,
+            #         )
         train_meter.iter_toc()  # do measure allreduce for this meter
         train_meter.log_iter_stats(cur_epoch, cur_iter)
         torch.cuda.synchronize()
         train_meter.iter_tic()
+
+        # write to tensorboard format if available.
+    if writer is not None:
+        if cfg.DATA.MULTI_LABEL:
+            writer.add_scalars(
+                {
+                    "Train/loss": sum(loss_vals) / len(loss_vals),
+                    "Train/lr": sum(lrs) / len(lrs),
+                },
+                global_step=cur_epoch+1,
+            )
+        else:
+            if not len(loss_vals) == 0:
+                writer.add_scalars(
+                    {
+                        "Train/loss": sum(loss_vals) / len(loss_vals),
+                        "Train/lr": sum(lrs) / len(lrs),
+                        "Train/Top1_err": sum(top1_errs) / len(top1_errs),
+                        "Train/Top5_err": sum(top5_errs) / len(top5_errs),
+                    },
+                    global_step=cur_epoch+1,
+                )
+
     del inputs
 
     # in case of fragmented memory
@@ -281,9 +334,9 @@ def train_epoch(
 
 
 @torch.no_grad()
-def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, writer):
+def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, writer, is_final_epoch=False):
     """
-    Evaluate the model on the val set.
+    Evaluate the model on the val set and implement early stopping.
     Args:
         val_loader (loader): data loader to provide validation data.
         model (model): model to evaluate the performance.
@@ -294,14 +347,19 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
         writer (TensorboardWriter, optional): TensorboardWriter object
             to writer Tensorboard log.
     """
-
     # Evaluation mode enabled. The running stats would not be updated.
     model.eval()
     val_meter.iter_tic()
 
+    best_val_loss = float('inf')
+    best_val_acc = 0.0
+    patience_counter = 0
+
+    dynamic_threshold_ratio = 0.05
+
     for cur_iter, (inputs, labels, index, time, meta) in enumerate(val_loader):
         if cfg.NUM_GPUS:
-            # Transferthe data to the current GPU device.
+            # Transfer the data to the current GPU device.
             if isinstance(inputs, (list,)):
                 for i in range(len(inputs)):
                     inputs[i] = inputs[i].cuda(non_blocking=True)
@@ -369,21 +427,59 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
             if cfg.DATA.MULTI_LABEL:
                 if cfg.NUM_GPUS > 1:
                     preds, labels = du.all_gather([preds, labels])
+
+                loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
+
+                # Compute F1 score, accuracies and loss value
+                f1 = metrics.f1_scores_multi_label(preds, labels, average='weighted')
+                avg_acc = metrics.accuracies_multi_label(preds, labels)
+                loss = loss_fun(preds, labels)
+
+                val_meter.iter_toc()
+                # Update and log stats.
+                val_meter.update_stats(
+                    f1,
+                    avg_acc,
+                    batch_size
+                    * max(
+                        cfg.NUM_GPUS, 1
+                    ),  # If running  on CPU (cfg.NUM_GPUS == 1), use 1 to represent 1 CPU.
+                )
+
+                if loss < best_val_loss * (1 - dynamic_threshold_ratio):
+                    best_val_loss = loss
+                    patience_counter = 0  # Reset patience counter
+                else:
+                    patience_counter += 1  # Increase patience counter
+
+                if writer is not None:
+                    writer.add_scalars({"Val/Loss": loss}, global_step=cur_epoch)
+                    writer.add_scalars({"Val/F1_Score": f1}, global_step=cur_epoch)
+                    writer.add_scalars({"Val/Average_Acc": avg_acc}, global_step=cur_epoch)
+
             else:
                 if cfg.DATA.IN22k_VAL_IN1K != "":
                     preds = preds[:, :1000]
-                # Compute the errors.
-                num_topks_correct = metrics.topks_correct(preds, labels, (1, 5))
 
-                # Combine the errors across the GPUs.
-                top1_err, top5_err = [
-                    (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
-                ]
+                # Compute the errors.
+                if cfg.MODEL.NUM_CLASSES >= 5:
+                    num_topks_correct = metrics.topks_correct(preds, labels, [1, 5])
+                    top1_err, top5_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ]
+                else:
+                    num_topks_correct = metrics.topks_correct(preds, labels, [1])
+                    top1_err = [
+                        (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
+                    ]
+                    top5_err = [-1.0]
+
                 if cfg.NUM_GPUS > 1:
                     top1_err, top5_err = du.all_reduce([top1_err, top5_err])
 
                 # Copy the errors from GPU to CPU (sync point).
-                top1_err, top5_err = top1_err.item(), top5_err.item()
+                # top1_err, top5_err = top1_err.item(), top5_err.item()
+                top1_err, top5_err = top1_err[0], top5_err[0]
 
                 val_meter.iter_toc()
                 # Update and log stats.
@@ -395,10 +491,11 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
                         cfg.NUM_GPUS, 1
                     ),  # If running  on CPU (cfg.NUM_GPUS == 1), use 1 to represent 1 CPU.
                 )
-                # write to tensorboard format if available.
-                if writer is not None:
+
+                if top5_err != -1:
                     writer.add_scalars(
-                        {"Val/Top1_err": top1_err, "Val/Top5_err": top5_err},
+                        {"Val/Top1_err": top1_err,
+                         "Val/Top5_err": top5_err},
                         global_step=len(val_loader) * cur_epoch + cur_iter,
                     )
 
@@ -420,6 +517,29 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
                 all_preds = [pred.cpu() for pred in all_preds]
                 all_labels = [label.cpu() for label in all_labels]
             writer.plot_eval(preds=all_preds, labels=all_labels, global_step=cur_epoch)
+
+            loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
+            loss = loss_fun(torch.cat(all_preds, dim=0), torch.cat(all_labels, dim=0))
+
+            if not cfg.DATA.MULTI_LABEL:
+                correct_num = metrics.topks_correct(torch.cat(all_preds, dim=0), torch.cat(all_labels, dim=0), [1])
+
+            else:
+                correct_num = metrics.topks_correct_multi_label(torch.cat(all_preds, dim=0), torch.cat(all_labels, dim=0), [1])
+
+            top1_acc = (correct_num[0] / torch.cat(all_preds, dim=0).size(0)) * 100.0
+
+            # macro_acc = metrics.macro_accuracy(torch.cat(all_preds, dim=0).cpu().numpy(), torch.cat(all_labels, dim=0).cpu().numpy())
+            labels = torch.cat(all_labels, dim=0)
+            preds = torch.cat(all_preds, dim=0)
+            preds = torch.where(preds >= cfg.TEST.GLOBAL_THRESHOLD, torch.tensor(1.0), torch.tensor(0.0))
+            preds = torch.argmax(preds, dim=1)
+            recall = sklearn.metrics.recall_score(labels, preds, average='macro')
+
+            writer.add_scalars(
+                {"Val/Loss": loss, "Val/Top1 Acc: ": top1_acc,  "Val/Recall": recall},
+                global_step=cur_epoch+1,
+            )
 
     val_meter.reset()
 
@@ -736,7 +856,7 @@ def train(cfg):
     if (
         start_epoch == cfg.SOLVER.MAX_EPOCH and not cfg.MASK.ENABLE
     ):  # final checkpoint load
-        eval_epoch(val_loader, model, val_meter, start_epoch, cfg, train_loader, writer)
+        eval_epoch(val_loader, model, val_meter, start_epoch, cfg, train_loader, writer, is_final_epoch=True)
     if writer is not None:
         writer.close()
     result_string = (

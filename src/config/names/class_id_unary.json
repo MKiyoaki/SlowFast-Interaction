@@ -1,0 +1,18 @@
+{
+  "No IR": 0,
+  "UA": 1,
+  "RM: Interruption": 2,
+  "UA + RM: Interruption": 3,
+  "RM: NonResponding": 4,
+  "UA + RM:NonResponding": 5,
+  "RM: Interruption + NonResponding": 6,
+  "UA + RM: Interruption + NonResponding": 7,
+  "RM: InappropriateResponse": 8,
+  "UA + RM: InappropriateResponse": 9,
+  "RM: Interruption + InappropriateResponse": 10,
+  "UA + RM: Interruption + InappropriateResponse": 11,
+  "RM: NonResponding + InappropriateResponse": 12,
+  "UA + RM:NonResponding + InappropriateResponse": 13,
+  "RM: Interruption + NonResponding + InappropriateResponse": 14,
+  "UA + RM: Interruption + NonResponding + InappropriateResponse": 15
+}

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
-
+import os
 import pickle
 
+import cv2
 import numpy as np
+import pandas as pd
+import torchvision
 
 import slowfast.datasets.utils as data_utils
 import slowfast.utils.checkpoint as cu
@@ -60,6 +63,7 @@ def run_visualization(vis_loader, model, cfg, writer=None):
         cfg.TENSORBOARD.CLASS_NAMES_PATH,
         cfg.TENSORBOARD.MODEL_VIS.TOPK_PREDS,
         cfg.TENSORBOARD.MODEL_VIS.COLORMAP,
+        thres=0.5,
     )
     if n_devices > 1:
         grad_cam_layer_ls = [
@@ -78,7 +82,8 @@ def run_visualization(vis_loader, model, cfg, writer=None):
         )
     logger.info("Finish drawing weights.")
     global_idx = -1
-    for inputs, labels, _, meta in tqdm.tqdm(vis_loader):
+    activation_avgs = []
+    for inputs, labels, _, _, meta, filename in tqdm.tqdm(vis_loader):
         if cfg.NUM_GPUS:
             # Transfer the data to the current GPU device.
             if isinstance(inputs, (list,)):
@@ -100,9 +105,14 @@ def run_visualization(vis_loader, model, cfg, writer=None):
             activations, preds = model_vis.get_activations(inputs)
         if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.ENABLE:
             if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
-                inputs, preds = gradcam(inputs, labels=labels)
+                inputs, preds, activation_avg, localization_avg = gradcam(inputs, labels=labels)
             else:
-                inputs, preds = gradcam(inputs)
+                inputs, preds, activation_avg, localization_avg = gradcam(inputs)
+            # Records the activation value for videos
+            for idx in range(len(preds)):
+                if torch.argmax(preds, dim=1)[idx] == labels[idx]:
+                    activation_avgs.append(activation_avg)
+
         if cfg.NUM_GPUS:
             inputs = du.all_gather_unaligned(inputs)
             activations = du.all_gather_unaligned(activations)
@@ -158,20 +168,93 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                                 if cfg.DETECTION.ENABLE
                                 else cur_preds[cur_batch_idx]
                             )
-                            video = video_vis.draw_clip(
-                                video, cur_prediction, bboxes=bboxes
-                            )
-                            video = (
-                                torch.from_numpy(np.array(video))
-                                .permute(0, 3, 1, 2)
-                                .unsqueeze(0)
-                            )
-                            writer.add_video(
-                                video,
-                                tag="Input {}/Pathway {}".format(
-                                    global_idx, path_idx + 1
-                                ),
-                            )
+
+                            all_preds = []
+                            if cfg.DATA.MULTI_LABEL:
+                                for class_idx in range(cur_prediction.shape[0]):  # For each class
+                                    # Create a binary label for the current class
+                                    binary_labels = torch.zeros_like(cur_prediction)
+                                    if cur_prediction[class_idx] >= 0.5:
+                                        binary_labels[class_idx] = cur_prediction[class_idx]
+                                        all_preds.append(binary_labels)
+                            else:
+                                all_preds.append(cur_prediction)
+
+                            for cur_prediction in all_preds:
+                                class_names, _, _ = misc.get_class_names(cfg.TENSORBOARD.CLASS_NAMES_PATH, None, None)
+                                video = video_vis.draw_clip(
+                                    video, cur_prediction, bboxes=bboxes
+                                )
+                                video = (
+                                    torch.from_numpy(np.array(video))
+                                    .permute(0, 3, 1, 2)
+                                    .unsqueeze(0)
+                                )
+                                if len(class_names) > 1:
+                                    for cls_idx in range(len(class_names)):
+                                        if cur_prediction[cls_idx] > cfg.TEST.GLOBAL_THRESHOLD:
+                                            is_true = cls_idx == labels[cur_batch_idx]
+                                            writer.add_video(
+                                                video,
+                                                tag="Cls {} - {}/File {}/Input {}, Pathway {}".format(
+                                                    class_names[cls_idx], is_true, filename[0], global_idx, path_idx + 1
+                                                ),
+                                            )
+                                else:
+                                    if cur_prediction > cfg.TEST.GLOBAL_THRESHOLD:
+                                        is_true = 0 == labels[cur_batch_idx]
+
+                                        writer.add_video(
+                                            video,
+                                            tag="Cls {} - {}/File {}/Input {}, Pathway {}".format(
+                                                class_names[0], is_true, filename[0], global_idx, path_idx + 1
+                                            ),
+                                        )
+
+                                if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR:
+                                    dir = os.path.join(cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR, "Path_" + str(path_idx))
+
+                                    # Create the corresponding subclass path for containing the video outputs
+                                    if cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.USE_TRUE_LABEL:
+                                        class_labels = labels
+                                    else:
+                                        class_labels = (
+                                            np.array(cur_preds[cur_batch_idx] > cfg.TEST.GLOBAL_THRESHOLD, dtype=int))  # Convert to binary labels
+
+                                    for idx, label in enumerate(class_labels):
+                                        is_true = idx == labels[cur_batch_idx]
+                                        if label == 1.0:
+                                            class_name = f"{class_names[idx]}_{is_true}"
+                                            class_dir = os.path.join(dir, class_name)
+                                            if not os.path.exists(class_dir):
+                                                os.makedirs(class_dir)
+
+                                            # Save the video to the corresponding class directory
+                                            video_filename = f"{filename[0]}_grad.mp4"
+                                            video_path = os.path.join(class_dir, video_filename)
+
+                                            video = video.squeeze(0).permute(0, 2, 3, 1)
+                                            video = (video * 255).to(torch.uint8)
+                                            torchvision.io.write_video(video_path, video, fps=30)
+
+                                            # TODO
+                                            # if path_idx == 0:
+                                            #     csv_path = os.path.join(cfg.TENSORBOARD.MODEL_VIS.GRAD_CAM.OUTPUT_DIR,
+                                            #                             f"{class_name}.csv")
+                                            #
+                                            #     new_data = pd.DataFrame({
+                                            #         "Video_path": [video_path],
+                                            #         "Localization_avg": [localization_avg.cpu()]
+                                            #     })
+                                            #
+                                            #     # Check if file exists to determine if header is needed
+                                            #     if os.path.exists(csv_path):
+                                            #         # Append mode, without header
+                                            #         new_data.to_csv(csv_path, mode='a', header=False, index=False)
+                                            #     else:
+                                            #         # Write mode, with header
+                                            #         new_data.to_csv(csv_path, mode='w', header=True, index=False)
+
                     if cfg.TENSORBOARD.MODEL_VIS.ACTIVATIONS:
                         writer.plot_weights_and_activations(
                             cur_activations,
@@ -179,6 +262,10 @@ def run_visualization(vis_loader, model, cfg, writer=None):
                             batch_idx=cur_batch_idx,
                             indexing_dict=indexing_dict,
                         )
+
+    activation_avgs = np.array(activation_avgs)
+    logger.info(f"Mean activation value: {round(np.mean(activation_avgs), 4)}")
+    logger.info(f"Variance of activation value: {round(np.var(activation_avgs), 4)}")
 
 
 def perform_wrong_prediction_vis(vis_loader, model, cfg):
@@ -191,7 +278,7 @@ def perform_wrong_prediction_vis(vis_loader, model, cfg):
             slowfast/config/defaults.py
     """
     wrong_prediction_visualizer = WrongPredictionVis(cfg=cfg)
-    for batch_idx, (inputs, labels, _, _) in tqdm.tqdm(enumerate(vis_loader)):
+    for batch_idx, (inputs, labels, _, _, _, _) in tqdm.tqdm(enumerate(vis_loader)):
         if cfg.NUM_GPUS:
             # Transfer the data to the current GPU device.
             if isinstance(inputs, (list,)):
@@ -273,7 +360,7 @@ def visualize(cfg):
         cu.load_test_checkpoint(cfg, model)
 
         # Create video testing loaders.
-        vis_loader = loader.construct_loader(cfg, "test")
+        vis_loader = loader.construct_loader(cfg, "vis")
 
         if cfg.DETECTION.ENABLE:
             assert cfg.NUM_GPUS == cfg.TEST.BATCH_SIZE or cfg.NUM_GPUS == 0
