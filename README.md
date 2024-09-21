@@ -2,7 +2,7 @@
 
 ### 1. Introduction
 
-SlowFast-Interaction is basing on the framework of PySlowFast, aims to explore the application of explainable AI paradigm in detecting and classifying human's responses to different types of Interaction Ruptures. 
+SlowFast-Interaction is basing on the framework of PySlowFast, aims to explore the application of explainable AI paradigm (e.g. GradCAM) in detecting and classifying human's behavioural responses to different types of Interaction Ruptures. 
 
 ### 2. Getting Start
 
@@ -13,8 +13,8 @@ SlowFast-Interaction is basing on the framework of PySlowFast, aims to explore t
 1. Put the data into the corresponding folder. 
    - Default path is `./data`. 
    - Put the raw videos and labels into `./data/raw`
-2. Change the initial path configurations at [`src/helper/configurations.py`](src/helper/configurations.py). 
-3. Call [`src/tools/data_preprocess.py`](src/tools/data_preprocess.py) to perform video preprocess and dataset split. 
+2. Change the initial path configurations at the configuration files [`src/helper/configurations.py`](src/helper/configurations.py) and `src/configs`. 
+3. Call [`src/tools/data_preprocess.py`](src/tools/data_preprocess.py) to perform video preprocess and dataset split. The scripts in the folder `src/tools` can be executed directly for corresponding purposes. 
    ```
    python src/tools/data_preprocess.py
    ```
@@ -25,7 +25,7 @@ SlowFast-Interaction is basing on the framework of PySlowFast, aims to explore t
 
 #### 2.3. Model Training
 
-1. At the root of the project, using the following command to start a training process. You can check more options at [`src/configs`](src/configs). 
+1. At the root of the project, using the following command to start a training process. You can check more options at [`src/configs`](src/configs). For instance, 
    ```
    python slowfast/tools/run_net.py --cfg src/config/ua_2022_slowfast.yaml
    ```
@@ -34,7 +34,7 @@ SlowFast-Interaction is basing on the framework of PySlowFast, aims to explore t
    tensorboard --logdir outputs/interaction/2022/slowfast/ua
    ```
 
-#### 2.4 Advanced Training Modification
+#### 2.4 Advanced Training Modification (Optional)
 
 1. Tweak on the datasets. Please check [`slowfast/slowfast/datasets/interaction.py`](slowfast/slowfast/datasets/interaction.py) and [`slowfast/slowfast/datasets/interaction_variant.py`](`slowfast/slowfast/datasets/interaction_variant.py`). 
 2. Implementation about model training pipeline. Please check [`slowfast/tools/train_net.py`](slowfast/tools/train_net.py). 
@@ -48,7 +48,7 @@ SlowFast-Interaction is basing on the framework of PySlowFast, aims to explore t
 2. If you want to get the videos from Grad-CAM as outputs, please set an output path in the configuration table. 
 3. After obtaining the outputs, please check [`src/tools/output_process.py`](src/tools/output_process.py) for details. e.g., Combine the video into a sequence, K-Means clustering, etc. 
 
-#### 2.6. Contact Information
+### 3. Contact Information
 
 yifeishi.1224@gmail.com
 
